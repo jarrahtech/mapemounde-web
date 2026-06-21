@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Mapemounde — API tester</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header>
+      <h1>Mapemounde</h1>
+      <p class="subtitle">A tiny client for exercising the star-system generator API.</p>
+    </header>
+
+    <main>
+      <form id="form">
+        <div class="row">
+          <label for="apiBase">API base</label>
+          <!-- Value is set by app.js (saved override → ?api= → default); remembered across visits. -->
+          <input id="apiBase" type="text" placeholder="http://localhost:8080" spellcheck="false" />
+        </div>
+
+        <div class="row">
+          <label for="generator">Generator</label>
+          <select id="generator">
+            <option value="ad2300">2300 AD</option>
+            <option value="btech">BattleTech</option>
+            <option value="aow">Architect of Worlds</option>
+            <option value="traveller">Traveller (Classic)</option>
+          </select>
+        </div>
+
+        <div class="row">
+          <label for="seed">Seed</label>
+          <input id="seed" type="text" value="42" spellcheck="false" />
+          <button type="button" id="randomSeed" class="ghost" title="Random seed">🎲</button>
+        </div>
+
+        <!-- BattleTech only -->
+        <div class="row param" data-param="btech">
+          <label for="starType">Star type</label>
+          <select id="starType">
+            <option value="Realistic">Realistic</option>
+            <option value="LifeFriendly">LifeFriendly</option>
+            <option value="HotStars">HotStars</option>
+          </select>
+        </div>
+
+        <!-- Architect of Worlds only -->
+        <div class="row param" data-param="aow">
+          <label for="earthLike">Earth-like bias</label>
+          <input id="earthLike" type="checkbox" />
+        </div>
+
+        <div class="row actions">
+          <button type="submit" id="generate">Generate</button>
+          <span id="status" class="status"></span>
+        </div>
+      </form>
+
+      <section id="result" hidden>
+        <div id="rendered"></div>
+        <details id="rawWrap">
+          <summary>Raw JSON</summary>
+          <pre id="raw"></pre>
+        </details>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>

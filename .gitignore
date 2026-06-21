@@ -1,0 +1,11 @@
+.vscode/
+
+# Scala/Metals leftovers — this is a client-only static site; keep these from coming back
+.metals/
+.bloop/
+.bsp/
+
+CLAUDE.md
+.claude/
+.mcp.json
+memory/
