@@ -9,64 +9,62 @@
   <body>
     <header>
       <h1>Mapemounde</h1>
-      <p class="subtitle">A tiny client for exercising the star-system generator API.</p>
+      <p class="subtitle">A tiny client for exercising the star-system generator API. Pick a generator.</p>
     </header>
 
     <main>
-      <form id="form">
+      <form id="hubForm">
         <div class="row">
           <label for="apiBase">API base</label>
-          <!-- Value is set by app.js (saved override → ?api= → default); remembered across visits. -->
+          <!-- Set/remembered here and shared with every generator page via localStorage. -->
           <input id="apiBase" type="text" placeholder="http://localhost:8080" spellcheck="false" />
         </div>
-
-        <div class="row">
-          <label for="generator">Generator</label>
-          <select id="generator">
-            <option value="ad2300">2300 AD</option>
-            <option value="btech">BattleTech</option>
-            <option value="aow">Architect of Worlds</option>
-            <option value="traveller">Traveller (Classic)</option>
-          </select>
-        </div>
-
-        <div class="row">
-          <label for="seed">Seed</label>
-          <input id="seed" type="text" value="42" spellcheck="false" />
-          <button type="button" id="randomSeed" class="ghost" title="Random seed">🎲</button>
-        </div>
-
-        <!-- BattleTech only -->
-        <div class="row param" data-param="btech">
-          <label for="starType">Star type</label>
-          <select id="starType">
-            <option value="Realistic">Realistic</option>
-            <option value="LifeFriendly">LifeFriendly</option>
-            <option value="HotStars">HotStars</option>
-          </select>
-        </div>
-
-        <!-- Architect of Worlds only -->
-        <div class="row param" data-param="aow">
-          <label for="earthLike">Earth-like bias</label>
-          <input id="earthLike" type="checkbox" />
-        </div>
-
-        <div class="row actions">
-          <button type="submit" id="generate">Generate</button>
-          <span id="status" class="status"></span>
-        </div>
+        <p class="hint">
+          Remembered across visits and shared by all four pages. Over HTTPS (GitHub Pages) the
+          API base must be <code>https://</code> — the browser blocks <code>http://</code> as mixed content.
+        </p>
       </form>
 
-      <section id="result" hidden>
-        <div id="rendered"></div>
-        <details id="rawWrap">
-          <summary>Raw JSON</summary>
-          <pre id="raw"></pre>
-        </details>
-      </section>
+      <nav class="cards">
+        <a class="gcard" href="ad2300.html">
+          <h2>2300 AD</h2>
+          <p>A 2300 AD system tree. No extra parameters.</p>
+        </a>
+        <a class="gcard" href="btech.html">
+          <h2>BattleTech</h2>
+          <p>System tree with a selectable stellar bias and habitability detail.</p>
+        </a>
+        <a class="gcard" href="aow.html">
+          <h2>Architect of Worlds</h2>
+          <p>The richest output — full world records, with an Earth-like bias toggle.</p>
+        </a>
+        <a class="gcard" href="traveller.html">
+          <h2>Traveller</h2>
+          <p>A flat Classic Traveller UWP record — the odd one out.</p>
+        </a>
+      </nav>
     </main>
 
-    <script src="app.js"></script>
+    <script>
+      "use strict";
+      // The hub only manages the shared API base; each generator page resolves it the same way.
+      const API_BASE_KEY = "mapemounde.apiBase";
+      const DEFAULT_API_BASE = "http://localhost:8080";
+      const input = document.getElementById("apiBase");
+
+      function read() {
+        const fromQuery = new URLSearchParams(location.search).get("api");
+        if (fromQuery) {
+          try { localStorage.setItem(API_BASE_KEY, fromQuery); } catch {}
+          return fromQuery;
+        }
+        try { return localStorage.getItem(API_BASE_KEY) || DEFAULT_API_BASE; } catch { return DEFAULT_API_BASE; }
+      }
+
+      input.value = read();
+      input.addEventListener("change", () => {
+        try { localStorage.setItem(API_BASE_KEY, input.value.trim()); } catch {}
+      });
+    </script>
   </body>
 </html>

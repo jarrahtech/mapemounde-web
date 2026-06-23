@@ -38,6 +38,19 @@ h1 {
   color: var(--muted);
 }
 
+.crumb {
+  margin: 0 0 0.5rem;
+}
+
+.crumb a {
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.crumb a:hover {
+  color: var(--accent);
+}
+
 main {
   max-width: 1000px;
   margin: 0 auto;
@@ -147,47 +160,180 @@ section#result {
   color: var(--text);
 }
 
-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-variant-numeric: tabular-nums;
+.unit {
+  color: var(--muted);
+  margin-left: 0.15rem;
+}
+
+/* Hub landing page: shared API-base config + a card per generator. */
+.hint {
+  color: var(--muted);
+  font-size: 0.9rem;
+  margin: 0.75rem 0 0;
+}
+
+code {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.05rem 0.3rem;
+  font-size: 0.9em;
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+.gcard {
+  display: block;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1rem 1.25rem;
+  color: inherit;
+  text-decoration: none;
+}
+
+.gcard:hover {
+  border-color: var(--accent);
+}
+
+.gcard h2 {
+  margin: 0 0 0.4rem;
+  font-size: 1.1rem;
+}
+
+.gcard p {
+  margin: 0;
+  color: var(--muted);
   font-size: 0.92rem;
 }
 
-th,
-td {
-  text-align: left;
-  padding: 0.4rem 0.6rem;
-  border-bottom: 1px solid var(--border);
-  white-space: nowrap;
+/* Result tree: each body is a node with collapsible-looking nested children. */
+.tree,
+.children {
+  list-style: none;
+  margin: 0;
+  padding: 0;
 }
 
-th {
-  color: var(--muted);
+.children {
+  margin-left: 1rem;
+  padding-left: 1rem;
+  border-left: 2px solid var(--border);
+}
+
+.node {
+  margin: 0.6rem 0;
+}
+
+.node-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.node-title {
   font-weight: 600;
 }
 
-td.num {
-  text-align: right;
-}
-
-.unit {
+.node-id {
   color: var(--muted);
-  margin-left: 0.25rem;
+  font-size: 0.85rem;
 }
 
-.kvs {
+.node-orbit {
+  color: var(--muted);
+  font-size: 0.9rem;
+  margin-left: auto;
+}
+
+.badge {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 700;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+
+.badge-star {
+  color: #ffd479;
+  border-color: #5a4a1f;
+}
+
+.badge-planet {
+  color: var(--accent);
+  border-color: #2c4a78;
+}
+
+.badge-moon {
+  color: #9fd6c2;
+  border-color: #2a5448;
+}
+
+.badge-asteroidBelt,
+.badge-ring,
+.badge-moonlet {
+  color: #c2a8e0;
+  border-color: #463058;
+}
+
+.node-detail {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.5rem;
+  margin: 0.4rem 0 0;
+}
+
+.sect {
+  min-width: 200px;
+}
+
+.sect h4 {
+  margin: 0 0 0.25rem;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+/* A definition-list grid used for orbit/core and every nested record. */
+.grid {
   display: grid;
   grid-template-columns: max-content 1fr;
-  gap: 0.35rem 1.25rem;
+  gap: 0.15rem 0.9rem;
+  margin: 0;
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
 }
 
-.kvs dt {
+.grid dt {
   color: var(--muted);
 }
 
-.kvs dd {
+.grid dd {
   margin: 0;
+}
+
+/* Nested grids (e.g. an AoW world's climate/atmosphere) indent slightly for legibility. */
+.grid dd > .grid {
+  margin: 0.15rem 0 0.35rem;
+  padding-left: 0.6rem;
+  border-left: 1px solid var(--border);
+}
+
+.list {
+  margin: 0;
+  padding-left: 1.1rem;
 }
 
 details {

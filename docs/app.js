@@ -1,17 +1,28 @@
 "use strict";
 
-// A deliberately tiny, build-free client. It maps the form to a GET request against the
-// API (one route per generator), then renders the JSON. Seed is always sent as a string
-// to match the API contract (Long seeds lose precision as JSON numbers past 2^53).
+// A deliberately tiny, build-free client. One script serves every generator page: the
+// page declares which generator it is via <body data-generator="...">, and any per-generator
+// query params via inputs carrying a [data-param] attribute. The script maps that form to a
+// GET request against the API, then renders the JSON.
+//
+// The new API returns a *nested tree* (`root` + `children`) for ad2300/btech/aow, and a flat
+// record for traveller. The node shape is uniform — shared `orbit`/`core` objects plus a
+// varying set of generator-specific extra keys — so we render orbit/core as labelled grids and
+// fall back to a generic recursive renderer for everything else. That keeps this one renderer
+// correct for all three trees (and the flat traveller record) without per-generator code.
+//
+// Seed is always sent as a string to match the API contract (Long seeds lose precision as JSON
+// numbers past 2^53).
 
-// Where the API lives. This is the fallback used on first visit; override it for your
-// deployment. NB: when this site is served over HTTPS (e.g. GitHub Pages), the browser
-// blocks calls to an http:// API as mixed content — the API base must be https:// there.
+// Where the API lives. Fallback used on first visit; override it for your deployment. NB: when
+// this site is served over HTTPS (e.g. GitHub Pages) the browser blocks calls to an http:// API
+// as mixed content — the API base must be https:// there.
 const DEFAULT_API_BASE = "http://localhost:8080";
 const API_BASE_KEY = "mapemounde.apiBase";
+const DASH = '<span class="unit">—</span>';
 
-// Resolve the API base, most-specific first: a ?api= query param wins (and is remembered),
-// then a previously saved value, then the built-in default.
+// Resolve the API base, most-specific first: a ?api= query param wins (and is remembered), then
+// a previously saved value, then the built-in default. Shared across every page via localStorage.
 function resolveApiBase() {
   const fromQuery = new URLSearchParams(location.search).get("api");
   if (fromQuery) {
@@ -39,39 +50,35 @@ const $ = (id) => document.getElementById(id);
 const els = {
   form: $("form"),
   apiBase: $("apiBase"),
-  generator: $("generator"),
   seed: $("seed"),
   randomSeed: $("randomSeed"),
-  starType: $("starType"),
-  earthLike: $("earthLike"),
   status: $("status"),
   result: $("result"),
   rendered: $("rendered"),
   raw: $("raw"),
 };
 
-// Show only the params relevant to the chosen generator.
-function syncParams() {
-  const gen = els.generator.value;
-  document.querySelectorAll(".param").forEach((el) => {
-    el.hidden = el.dataset.param !== gen;
-  });
-}
+const GENERATOR = document.body.dataset.generator;
 
-// Build the request URL for the current form state.
+// Build the request URL for the current form state. Per-generator params are any inputs marked
+// with data-param="<name>" on the page (a checkbox contributes its checked-ness as true/false).
 function buildUrl() {
   const base = els.apiBase.value.replace(/\/+$/, "");
-  const gen = els.generator.value;
   const params = new URLSearchParams({ seed: els.seed.value.trim() });
-  if (gen === "btech") params.set("starType", els.starType.value);
-  if (gen === "aow") params.set("earthLike", String(els.earthLike.checked));
-  return `${base}/api/v1/${gen}?${params.toString()}`;
+  document.querySelectorAll("[data-param]").forEach((el) => {
+    const name = el.dataset.param;
+    params.set(name, el.type === "checkbox" ? String(el.checked) : el.value);
+  });
+  return `${base}/api/v1/${GENERATOR}?${params.toString()}`;
 }
 
-// Render a {value, unit} quantity, or an em dash when absent.
-function quantity(q) {
-  if (q == null) return '<span class="unit">—</span>';
-  return `${formatNumber(q.value)}<span class="unit">${escapeHtml(q.unit)}</span>`;
+// --- formatting helpers -----------------------------------------------------------------------
+
+function escapeHtml(s) {
+  return String(s).replace(
+    /[&<>"']/g,
+    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c],
+  );
 }
 
 function formatNumber(v) {
@@ -81,90 +88,121 @@ function formatNumber(v) {
   return String(Math.round(v * 10000) / 10000);
 }
 
-function escapeHtml(s) {
-  return String(s).replace(
-    /[&<>"']/g,
-    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c],
+function text(value) {
+  if (value === null || value === undefined) return DASH;
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (typeof value === "number") return formatNumber(value);
+  return escapeHtml(value);
+}
+
+// A {value, unit} quantity — the API's self-describing physical-quantity shape.
+function isQuantity(v) {
+  return (
+    v && typeof v === "object" && typeof v.value === "number" &&
+    typeof v.unit === "string" && Object.keys(v).length === 2
   );
 }
 
-function text(value) {
-  return value == null ? '<span class="unit">—</span>' : escapeHtml(value);
+function quantity(q) {
+  if (q == null) return DASH;
+  return `${formatNumber(q.value)}<span class="unit">${escapeHtml(q.unit)}</span>`;
 }
 
-// SystemView (ad2300, btech, aow): a flattened object list + orbit list.
-function renderSystem(data) {
-  const objectRows = data.objects
-    .map(
-      (o) => `<tr>
-        <td>${text(o.kind)}</td>
-        <td>${text(o.stellarClass)}</td>
-        <td class="num">${quantity(o.mass)}</td>
-        <td class="num">${quantity(o.radius)}</td>
-        <td class="num">${quantity(o.density)}</td>
-        <td class="num">${quantity(o.surfaceGravity)}</td>
-        <td class="num">${quantity(o.escapeVelocity)}</td>
-        <td class="num">${quantity(o.luminosity)}</td>
-        <td class="num">${quantity(o.temperature)}</td>
-      </tr>`,
-    )
-    .join("");
+// camelCase / PascalCase key -> a spaced, capitalised label. "surfaceGravity" -> "Surface gravity".
+function humanize(key) {
+  const spaced = String(key).replace(/([a-z0-9])([A-Z])/g, "$1 $2");
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
 
-  const orbitRows = data.orbits
-    .map(
-      (o) => `<tr>
-        <td>${text(o.obj)}</td>
-        <td class="num">${quantity(o.radius)}</td>
-        <td class="num">${o.eccentricity == null ? '<span class="unit">—</span>' : formatNumber(o.eccentricity)}</td>
-        <td class="num">${quantity(o.blackbody)}</td>
-      </tr>`,
-    )
-    .join("");
+// --- generic value renderer -------------------------------------------------------------------
+// Renders any JSON value the API can emit: quantities via quantity(), nested objects as labelled
+// grids (recursively), arrays as lists, primitives as text. This is what makes one renderer cover
+// every generator's bespoke detail (body, planet, belt, world, rotation, …) with no special cases.
 
-  return `
-    <div class="card">
-      <p class="meta">Generator <strong>${text(data.generator)}</strong> · seed <strong>${text(data.seed)}</strong> · ${data.objects.length} objects · ${data.orbits.length} orbits</p>
-      <h2>Objects</h2>
-      <table>
-        <thead><tr>
-          <th>Kind</th><th>Class</th><th>Mass</th><th>Radius</th><th>Density</th>
-          <th>Surface g</th><th>Escape v</th><th>Luminosity</th><th>Temp</th>
-        </tr></thead>
-        <tbody>${objectRows}</tbody>
-      </table>
+function renderValue(v) {
+  if (v === null || v === undefined) return DASH;
+  if (isQuantity(v)) return quantity(v);
+  if (Array.isArray(v)) {
+    if (v.length === 0) return DASH;
+    if (v.every((x) => x === null || typeof x !== "object")) return v.map(text).join(", ");
+    return `<ul class="list">${v.map((x) => `<li>${renderValue(x)}</li>`).join("")}</ul>`;
+  }
+  if (typeof v === "object") return renderGrid(Object.entries(v));
+  return text(v);
+}
+
+// A definition-list grid from [key, value] pairs. Absent values are skipped (the API omits, not
+// nulls, but we guard anyway). Returns an em dash when nothing is left to show.
+function renderGrid(entries) {
+  const rows = entries
+    .filter(([, val]) => val !== null && val !== undefined)
+    .map(([k, val]) => `<dt>${escapeHtml(humanize(k))}</dt><dd>${renderValue(val)}</dd>`)
+    .join("");
+  return rows ? `<dl class="grid">${rows}</dl>` : DASH;
+}
+
+// --- tree renderer ----------------------------------------------------------------------------
+
+// Fields every node carries; everything else is generator-specific richness rendered generically.
+const STRUCTURAL = new Set(["id", "kind", "orbit", "core", "children"]);
+
+function section(title, html) {
+  return `<div class="sect"><h4>${escapeHtml(title)}</h4>${html}</div>`;
+}
+
+function nonEmpty(obj) {
+  return obj && typeof obj === "object" && Object.keys(obj).length > 0;
+}
+
+function renderNode(node) {
+  // A short headline: stellar class for stars, else the most specific body-type label available.
+  const title =
+    node.core?.stellarClass || node.bodyType || node.planet?.planetType ||
+    node.moon?.planetType || node.ringType || humanize(node.kind);
+  const orbitRadius = node.orbit?.radius ? quantity(node.orbit.radius) : "";
+
+  const sections = [];
+  if (nonEmpty(node.orbit)) sections.push(section("Orbit", renderGrid(Object.entries(node.orbit))));
+  if (nonEmpty(node.core)) sections.push(section("Core", renderGrid(Object.entries(node.core))));
+  for (const [k, val] of Object.entries(node)) {
+    if (STRUCTURAL.has(k)) continue;
+    sections.push(section(humanize(k), renderValue(val)));
+  }
+
+  const kids = (node.children || []).map(renderNode).join("");
+  return `<li class="node">
+    <div class="node-head">
+      <span class="badge badge-${escapeHtml(node.kind)}">${escapeHtml(node.kind)}</span>
+      <span class="node-title">${escapeHtml(title)}</span>
+      <span class="node-id">#${escapeHtml(node.id)}</span>
+      ${orbitRadius ? `<span class="node-orbit">${orbitRadius}</span>` : ""}
     </div>
-    <div class="card">
-      <h2>Orbits</h2>
-      <table>
-        <thead><tr><th>Object</th><th>Radius</th><th>Eccentricity</th><th>Blackbody</th></tr></thead>
-        <tbody>${orbitRows}</tbody>
-      </table>
-    </div>`;
+    <div class="node-detail">${sections.join("")}</div>
+    ${kids ? `<ul class="children">${kids}</ul>` : ""}
+  </li>`;
 }
 
-// TravellerView: a flat Classic Traveller UWP record.
-function renderTraveller(data) {
-  const kv = (k, v) => `<dt>${escapeHtml(k)}</dt><dd>${text(v == null ? null : String(v))}</dd>`;
-  return `
-    <div class="card">
-      <p class="meta">Generator <strong>${text(data.generator)}</strong> · seed <strong>${text(data.seed)}</strong></p>
-      <dl class="kvs">
-        ${kv("Starport", data.starport)}
-        ${kv("Naval base", data.navalBase)}
-        ${kv("Scout base", data.scoutBase)}
-        ${kv("Gas giant", data.gasGiant)}
-        ${kv("Travel zone", data.zone)}
-        ${kv("Size", data.size)}
-        ${kv("Atmosphere", data.atmosphere)}
-        ${kv("Water", data.water)}
-        ${kv("Population", data.population)}
-        ${kv("Government", data.government)}
-        ${kv("Law", data.law)}
-        ${kv("Tech", data.tech)}
-        ${kv("Trade", (data.trade || []).join(", ") || null)}
-      </dl>
-    </div>`;
+// The header line: always generator + seed, plus any system-level params (passed in as extras —
+// for aow these are age/metallicity/earthLike, for btech starType). The flat record passes no
+// extras since the grid below already lists every field.
+function renderMeta(data, extras) {
+  const tail = extras
+    .map(([k, v]) => ` · ${escapeHtml(humanize(k))} <strong>${renderValue(v)}</strong>`)
+    .join("");
+  return `<p class="meta">Generator <strong>${text(data.generator)}</strong> · seed <strong>${text(data.seed)}</strong>${tail}</p>`;
 }
+
+function render(data) {
+  if (data.root) {
+    const extras = Object.entries(data).filter(([k]) => !["generator", "seed", "root"].includes(k));
+    return `<div class="card">${renderMeta(data, extras)}<ul class="tree">${renderNode(data.root)}</ul></div>`;
+  }
+  // Flat record (traveller): render every field but the generator/seed shown in the meta line.
+  const record = Object.entries(data).filter(([k]) => !["generator", "seed"].includes(k));
+  return `<div class="card">${renderMeta(data, [])}${renderGrid(record)}</div>`;
+}
+
+// --- wiring -----------------------------------------------------------------------------------
 
 function setStatus(message, isError) {
   els.status.textContent = message;
@@ -189,7 +227,7 @@ async function generate(event) {
       return;
     }
 
-    els.rendered.innerHTML = els.generator.value === "traveller" ? renderTraveller(body) : renderSystem(body);
+    els.rendered.innerHTML = render(body);
     els.result.hidden = false;
     setStatus(`OK (${url})`, false);
   } catch (err) {
@@ -198,15 +236,13 @@ async function generate(event) {
   }
 }
 
-els.generator.addEventListener("change", syncParams);
 els.randomSeed.addEventListener("click", () => {
   // A big seed to show string seeds survive the round trip (past 2^53).
   els.seed.value = String(Math.floor(Math.random() * 9e15));
 });
-// Remember the API base across visits whenever the user edits it.
+// Remember the API base across visits (and across pages) whenever the user edits it.
 els.apiBase.addEventListener("change", () => saveApiBase(els.apiBase.value.trim()));
 els.form.addEventListener("submit", generate);
 
-// Seed the field from the saved/override/default base, then show the right params.
+// Seed the API-base field from the saved/override/default base.
 els.apiBase.value = resolveApiBase();
-syncParams();

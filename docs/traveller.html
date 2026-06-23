@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Mapemounde — Traveller</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body data-generator="traveller">
+    <header>
+      <p class="crumb"><a href="index.html">← Mapemounde</a></p>
+      <h1>Traveller (Classic)</h1>
+      <p class="subtitle">A flat UWP world record — not a star-system tree.</p>
+    </header>
+
+    <main>
+      <form id="form">
+        <div class="row">
+          <label for="apiBase">API base</label>
+          <!-- Value is set by app.js (saved override → ?api= → default); remembered across visits and pages. -->
+          <input id="apiBase" type="text" placeholder="http://localhost:8080" spellcheck="false" />
+        </div>
+
+        <div class="row">
+          <label for="seed">Seed</label>
+          <input id="seed" type="text" value="42" spellcheck="false" />
+          <button type="button" id="randomSeed" class="ghost" title="Random seed">🎲</button>
+        </div>
+
+        <div class="row actions">
+          <button type="submit" id="generate">Generate</button>
+          <span id="status" class="status"></span>
+        </div>
+      </form>
+
+      <section id="result" hidden>
+        <div id="rendered"></div>
+        <details id="rawWrap">
+          <summary>Raw JSON</summary>
+          <pre id="raw"></pre>
+        </details>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>
