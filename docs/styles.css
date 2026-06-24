@@ -146,6 +146,19 @@ section#result {
   margin-bottom: 1rem;
 }
 
+/* Traveller system hex: an inline SVG on its own white field, centred in the card. */
+.hex-card {
+  display: flex;
+  justify-content: center;
+}
+
+.hex-svg {
+  width: 100%;
+  max-width: 360px;
+  height: auto;
+  color: var(--text);
+}
+
 .card h2 {
   margin: 0 0 0.75rem;
   font-size: 1.05rem;

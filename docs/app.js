@@ -141,6 +141,56 @@ function renderGrid(entries) {
   return rows ? `<dl class="grid">${rows}</dl>` : DASH;
 }
 
+// --- traveller hex diagram --------------------------------------------------------------------
+// The Classic Traveller "system hex": one hexagon carrying the starport class (a letter), base
+// markers (★ naval at left, ▲ scout at lower-left), a gas-giant dot (upper-right), and the world
+// symbol in the centre — filled when the world has oceans, an open circle when it has none. Drawn
+// as inline SVG (self-contained colours, vector glyphs) so stage 2 can offer it as a download
+// unchanged. The UWP status line will be added once the API emits it.
+
+const STARPORT_LETTER = {
+  Excellent: "A", Good: "B", Routine: "C", Poor: "D", Frontier: "E", None: "X",
+};
+
+function starportLetter(name) {
+  return STARPORT_LETTER[name] || (name ? String(name).charAt(0).toUpperCase() : "?");
+}
+
+// A 5-point star path centred on (cx, cy), so the marker renders without relying on a font glyph.
+function starPath(cx, cy, outer, inner) {
+  let d = "";
+  for (let i = 0; i < 10; i++) {
+    const r = i % 2 === 0 ? outer : inner;
+    const a = -Math.PI / 2 + (i * Math.PI) / 5;
+    d += `${i === 0 ? "M" : "L"}${(cx + r * Math.cos(a)).toFixed(2)},${(cy + r * Math.sin(a)).toFixed(2)}`;
+  }
+  return d + "Z";
+}
+
+function renderTravellerSvg(data) {
+  const letter = starportLetter(data.starport);
+  const hasOceans = typeof data.water === "number" && data.water > 0;
+  // World symbol: solid disc when there are oceans, hollow circle when there are none. Colours use
+  // currentColor so the hex inherits the page text colour on-screen and defaults to black when the
+  // SVG is opened standalone (e.g. after a stage-2 download). Background stays transparent.
+  // Regular hexagon centred on (130, 120); the world disc sits at that centre.
+  const world = hasOceans
+    ? `<circle cx="130" cy="120" r="24" fill="currentColor" />`
+    : `<circle cx="130" cy="120" r="24" fill="none" stroke="currentColor" stroke-width="3" />`;
+  const naval = data.navalBase ? `<path d="${starPath(60, 112, 15, 6)}" fill="currentColor" />` : "";
+  const scout = data.scoutBase ? `<polygon points="80,150 92,172 68,172" fill="currentColor" />` : "";
+  const gasGiant = data.gasGiant ? `<circle cx="190" cy="78" r="8" fill="currentColor" />` : "";
+
+  return `<svg class="hex-svg" viewBox="0 0 260 240" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Traveller system hex">
+    <polygon points="75,25 185,25 240,120 185,215 75,215 20,120" fill="none" stroke="currentColor" stroke-width="3" />
+    <text x="130" y="74" text-anchor="middle" font-family="system-ui, sans-serif" font-size="40" font-weight="700" fill="currentColor">${escapeHtml(letter)}</text>
+    ${naval}
+    ${scout}
+    ${gasGiant}
+    ${world}
+  </svg>`;
+}
+
 // --- tree renderer ----------------------------------------------------------------------------
 
 // Fields every node carries; everything else is generator-specific richness rendered generically.
@@ -197,7 +247,12 @@ function render(data) {
     const extras = Object.entries(data).filter(([k]) => !["generator", "seed", "root"].includes(k));
     return `<div class="card">${renderMeta(data, extras)}<ul class="tree">${renderNode(data.root)}</ul></div>`;
   }
-  // Flat record (traveller): render every field but the generator/seed shown in the meta line.
+  // Traveller is a flat UWP record; show it as the Classic Traveller system hex. (The UWP status
+  // line will be added below the hex once the API emits it.)
+  if (data.generator === "traveller") {
+    return `<div class="card hex-card">${renderTravellerSvg(data)}</div>`;
+  }
+  // Any other flat record: render every field but the generator/seed shown in the meta line.
   const record = Object.entries(data).filter(([k]) => !["generator", "seed"].includes(k));
   return `<div class="card">${renderMeta(data, [])}${renderGrid(record)}</div>`;
 }
