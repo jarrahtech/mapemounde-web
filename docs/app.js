@@ -56,6 +56,8 @@ const els = {
   result: $("result"),
   rendered: $("rendered"),
   raw: $("raw"),
+  systemName: $("systemName"), // traveller page only; null elsewhere
+  downloadSvg: $("downloadSvg"),
 };
 
 const GENERATOR = document.body.dataset.generator;
@@ -167,7 +169,7 @@ function starPath(cx, cy, outer, inner) {
   return d + "Z";
 }
 
-function renderTravellerSvg(data) {
+function renderTravellerSvg(data, name) {
   const letter = starportLetter(data.starport);
   const hasOceans = typeof data.water === "number" && data.water > 0;
   // World symbol: solid disc when there are oceans, hollow circle when there are none. Colours use
@@ -180,6 +182,11 @@ function renderTravellerSvg(data) {
   const naval = data.navalBase ? `<path d="${starPath(60, 112, 15, 6)}" fill="currentColor" />` : "";
   const scout = data.scoutBase ? `<polygon points="80,150 92,172 68,172" fill="currentColor" />` : "";
   const gasGiant = data.gasGiant ? `<circle cx="190" cy="78" r="8" fill="currentColor" />` : "";
+  // Display-only system name along the bottom-inside edge; fitHexName() shrinks it to fit afterward.
+  const label = (name || "").trim();
+  const nameText = label
+    ? `<text class="hex-name" x="130" y="198" text-anchor="middle" font-family="system-ui, sans-serif" font-size="22" fill="currentColor">${escapeHtml(label)}</text>`
+    : "";
 
   return `<svg class="hex-svg" viewBox="0 0 260 240" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Traveller system hex">
     <polygon points="75,25 185,25 240,120 185,215 75,215 20,120" fill="none" stroke="currentColor" stroke-width="3" />
@@ -188,8 +195,54 @@ function renderTravellerSvg(data) {
     ${scout}
     ${gasGiant}
     ${world}
+    ${nameText}
   </svg>`;
 }
+
+function travellerCardHtml(data, name) {
+  return `<div class="card hex-card">${renderTravellerSvg(data, name)}</div>`;
+}
+
+// Compress an over-long name to stay within the hex's bottom edge (must run after the SVG is in the
+// DOM, since it measures the rendered text). Short names are left at their natural size.
+function fitHexName() {
+  const t = els.rendered.querySelector(".hex-name");
+  if (!t || typeof t.getComputedTextLength !== "function") return;
+  const MAX_WIDTH = 96;
+  if (t.getComputedTextLength() > MAX_WIDTH) {
+    t.setAttribute("textLength", String(MAX_WIDTH));
+    t.setAttribute("lengthAdjust", "spacingAndGlyphs");
+  }
+}
+
+// Serialize the on-screen hex to a downloadable SVG file. On screen the ink is currentColor (theme
+// aware); a standalone file has no theme, and many SVG viewers (librsvg etc.) don't resolve
+// currentColor reliably, so we bake the literal ink colour into the file. Background stays
+// transparent (no rect), and we set width/height so viewers have an intrinsic size.
+const EXPORT_INK = "#111";
+
+function downloadSvg() {
+  const svg = els.rendered.querySelector("svg.hex-svg");
+  if (!svg) return;
+  const clone = svg.cloneNode(true);
+  clone.removeAttribute("class");
+  clone.setAttribute("width", "260");
+  clone.setAttribute("height", "240");
+  const serialized = new XMLSerializer().serializeToString(clone).replace(/currentColor/g, EXPORT_INK);
+  const xml = '<?xml version="1.0" encoding="UTF-8"?>\n' + serialized;
+  const blob = new Blob([xml], { type: "image/svg+xml;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const base = ((els.systemName && els.systemName.value) || lastTravellerData?.seed || "hex")
+    .trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "hex";
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `traveller-${base}.svg`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// Last traveller payload, so the name field can re-render the hex without re-fetching.
+let lastTravellerData = null;
 
 // --- tree renderer ----------------------------------------------------------------------------
 
@@ -250,7 +303,8 @@ function render(data) {
   // Traveller is a flat UWP record; show it as the Classic Traveller system hex. (The UWP status
   // line will be added below the hex once the API emits it.)
   if (data.generator === "traveller") {
-    return `<div class="card hex-card">${renderTravellerSvg(data)}</div>`;
+    lastTravellerData = data;
+    return travellerCardHtml(data, els.systemName ? els.systemName.value : "");
   }
   // Any other flat record: render every field but the generator/seed shown in the meta line.
   const record = Object.entries(data).filter(([k]) => !["generator", "seed"].includes(k));
@@ -283,6 +337,7 @@ async function generate(event) {
     }
 
     els.rendered.innerHTML = render(body);
+    if (GENERATOR === "traveller") fitHexName();
     els.result.hidden = false;
     setStatus(`OK (${url})`, false);
   } catch (err) {
@@ -298,6 +353,17 @@ els.randomSeed.addEventListener("click", () => {
 // Remember the API base across visits (and across pages) whenever the user edits it.
 els.apiBase.addEventListener("change", () => saveApiBase(els.apiBase.value.trim()));
 els.form.addEventListener("submit", generate);
+
+// Traveller-only: the name is a display label, so re-render the hex live as it's typed (no refetch),
+// and let the button export the current hex as an SVG. Both controls exist only on the traveller page.
+if (els.systemName) {
+  els.systemName.addEventListener("input", () => {
+    if (!lastTravellerData) return;
+    els.rendered.innerHTML = travellerCardHtml(lastTravellerData, els.systemName.value);
+    fitHexName();
+  });
+}
+if (els.downloadSvg) els.downloadSvg.addEventListener("click", downloadSvg);
 
 // Seed the API-base field from the saved/override/default base.
 els.apiBase.value = resolveApiBase();

@@ -35,6 +35,12 @@
 
       <section id="result" hidden>
         <div id="rendered"></div>
+        <div class="hex-controls">
+          <label for="systemName">Name</label>
+          <!-- Display-only label drawn inside the hex; client-side, never sent to the API. -->
+          <input id="systemName" type="text" placeholder="System name" spellcheck="false" maxlength="40" />
+          <button type="button" id="downloadSvg" class="ghost" title="Download the hex as an SVG">⬇ Download SVG</button>
+        </div>
         <details id="rawWrap">
           <summary>Raw JSON</summary>
           <pre id="raw"></pre>
