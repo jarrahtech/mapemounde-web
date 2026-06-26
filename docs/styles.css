@@ -159,6 +159,15 @@ section#result {
   color: var(--text);
 }
 
+/* Traveller UWP status line under the hex: the world profile string, shown verbatim/monospaced. */
+.uwp {
+  margin: 0.75rem 0 0;
+  text-align: center;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  letter-spacing: 0.04em;
+  color: var(--text);
+}
+
 /* Name + download controls under the traveller hex. */
 .hex-controls {
   display: flex;

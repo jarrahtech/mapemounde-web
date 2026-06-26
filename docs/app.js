@@ -148,7 +148,7 @@ function renderGrid(entries) {
 // markers (★ naval at left, ▲ scout at lower-left), a gas-giant dot (upper-right), and the world
 // symbol in the centre — filled when the world has oceans, an open circle when it has none. Drawn
 // as inline SVG (self-contained colours, vector glyphs) so stage 2 can offer it as a download
-// unchanged. The UWP status line will be added once the API emits it.
+// unchanged. The UWP status line (`wdf`) is rendered below the hex by travellerCardHtml.
 
 const STARPORT_LETTER = {
   Excellent: "A", Good: "B", Routine: "C", Poor: "D", Frontier: "E", None: "X",
@@ -200,7 +200,12 @@ function renderTravellerSvg(data, name) {
 }
 
 function travellerCardHtml(data, name) {
-  return `<div class="card hex-card">${renderTravellerSvg(data, name)}</div>`;
+  // The UWP status line sits below the hex (the API now emits it as `wdf`): the world profile string
+  // plus base/trade codes. Shown verbatim and monospaced so the columns line up as Traveller prints them.
+  const uwp = data.wdf
+    ? `<p class="uwp">${escapeHtml(String(data.wdf).trim())}</p>`
+    : "";
+  return `<div class="card hex-card">${renderTravellerSvg(data, name)}</div>${uwp}`;
 }
 
 // Compress an over-long name to stay within the hex's bottom edge (must run after the SVG is in the
@@ -300,8 +305,8 @@ function render(data) {
     const extras = Object.entries(data).filter(([k]) => !["generator", "seed", "root"].includes(k));
     return `<div class="card">${renderMeta(data, extras)}<ul class="tree">${renderNode(data.root)}</ul></div>`;
   }
-  // Traveller is a flat UWP record; show it as the Classic Traveller system hex. (The UWP status
-  // line will be added below the hex once the API emits it.)
+  // Traveller is a flat UWP record; show it as the Classic Traveller system hex, with the UWP
+  // status line (`wdf`) rendered below the hex.
   if (data.generator === "traveller") {
     lastTravellerData = data;
     return travellerCardHtml(data, els.systemName ? els.systemName.value : "");
