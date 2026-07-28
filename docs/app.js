@@ -300,6 +300,33 @@ const ORRERY = {
 const MUTED_INK = "#8a94a3";
 const RING_INK = "#c2a8e0"; // rings and asteroid belts
 
+// Star colour by Harvard spectral class — the leading letter of `core.stellarClass`. These are
+// schematic, not photometric: to the eye every star is close to white, so the hues are pushed well
+// past life to keep an M dwarf and an A star apart at 26px. Each class gives a hot core, the
+// characteristic mid hue, and a deeper limb. The generators between them emit D/F/G/K/L/M/T/Y, and
+// btech's HotStars bias adds A/B; O is included to complete the sequence.
+const STAR_TINTS = {
+  O: { core: "#eaf1ff", mid: "#9bb0ff", edge: "#4c6fd8" },
+  B: { core: "#f0f5ff", mid: "#b4c8ff", edge: "#6a8ce0" },
+  A: { core: "#ffffff", mid: "#d7e2ff", edge: "#93a9d8" },
+  F: { core: "#fffdf5", mid: "#f4efd4", edge: "#c3b585" },
+  G: { core: "#fff6d0", mid: "#ffd479", edge: "#e79a2f" },
+  K: { core: "#ffe8c2", mid: "#ffab5c", edge: "#d4711f" },
+  M: { core: "#ffd3b0", mid: "#ff8155", edge: "#c23f22" },
+  L: { core: "#e2a58c", mid: "#a9543f", edge: "#6b2a20" }, // brown dwarf
+  T: { core: "#cf92ad", mid: "#7f4266", edge: "#46203c" }, // methane dwarf
+  Y: { core: "#9585a2", mid: "#52415f", edge: "#2a2036" },
+  D: { core: "#ffffff", mid: "#dcefff", edge: "#93bfe6" }, // white dwarf: D0, D2, …
+};
+
+// The class letter, or "G" when the API sends no class or one we don't know — which keeps an
+// unclassified star looking exactly as it did before this table existed. Validating against
+// STAR_TINTS also means the key is always a safe literal to interpolate into a gradient id.
+function starTint(node) {
+  const letter = String(node.core?.stellarClass ?? "").trim().charAt(0).toUpperCase();
+  return STAR_TINTS[letter] ? letter : "G";
+}
+
 // Only two glyphs are ever drawn as row entries, because only a star's direct children get a row:
 // the planet disc, and the smaller disc of a companion star. Moons, moonlets and rings are always
 // nested under a planet, and a belt draws its own dots — so anything else the API puts in orbit
@@ -391,9 +418,27 @@ function orbitLabel(q) {
   return `${escapeHtml(figure)}<tspan fill="${MUTED_INK}" dx="2">${escapeHtml(q.unit)}</tspan>`;
 }
 
-function starGlyph(x, y, r) {
-  return `<circle cx="${n2(x)}" cy="${n2(y)}" r="${n2(r * 1.5)}" fill="url(#orreryGlow)" />
-    <circle cx="${n2(x)}" cy="${n2(y)}" r="${n2(r)}" fill="url(#orreryStar)" />`;
+function starGlyph(x, y, r, tint) {
+  return `<circle cx="${n2(x)}" cy="${n2(y)}" r="${n2(r * 1.5)}" fill="url(#orreryGlow${tint})" />
+    <circle cx="${n2(x)}" cy="${n2(y)}" r="${n2(r)}" fill="url(#orreryStar${tint})" />`;
+}
+
+// One gradient pair per spectral class actually present, rather than all eleven every time.
+function starTintDefs(tints) {
+  return [...tints]
+    .map((t) => {
+      const c = STAR_TINTS[t];
+      return `<radialGradient id="orreryStar${t}" cx="38%" cy="34%" r="72%">
+        <stop offset="0%" stop-color="${c.core}" />
+        <stop offset="55%" stop-color="${c.mid}" />
+        <stop offset="100%" stop-color="${c.edge}" />
+      </radialGradient>
+      <radialGradient id="orreryGlow${t}">
+        <stop offset="55%" stop-color="${c.mid}" stop-opacity="0.3" />
+        <stop offset="100%" stop-color="${c.mid}" stop-opacity="0" />
+      </radialGradient>`;
+    })
+    .join("");
 }
 
 // Fixed offsets rather than Math.random(), so the same seed always draws the same belt — a system
@@ -426,7 +471,7 @@ function bodySvg(row, b) {
     parts.push(beltGlyph(row, b));
   } else if (node.kind === "star") {
     // A companion star gets the same treatment as a row head, just smaller.
-    parts.push(starGlyph(x, y, g.r));
+    parts.push(starGlyph(x, y, g.r, starTint(node)));
   } else {
     const disc = `<circle cx="${n2(x)}" cy="${n2(y)}" r="${g.r}" fill="${g.fill}" />`;
     if (kids?.ring) {
@@ -478,7 +523,7 @@ function orreryRowSvg(row) {
   for (const b of row.bodies) {
     parts.push(`<ellipse cx="${n2(row.x)}" cy="${n2(row.y)}" rx="${n2(b.rx)}" ry="${n2(b.ry)}" fill="none" stroke="currentColor" stroke-opacity="0.28" stroke-width="1" />`);
   }
-  parts.push(starGlyph(row.x, row.y, row.r));
+  parts.push(starGlyph(row.x, row.y, row.r, starTint(row.node)));
   parts.push(svgText(row.x, row.y + row.r + 22, escapeHtml(bodyLabel(row.node)), 13, "currentColor", 600));
   for (const b of row.bodies) parts.push(bodySvg(row, b));
   return parts.join("");
@@ -492,7 +537,12 @@ function renderOrrerySvg(root) {
 
   let width = 0;
   let height = 0;
+  const tints = new Set();
   for (const row of rows) {
+    // Every star is drawn twice over: as a row head, and (for a companion) as a body in its
+    // primary's row. Collect from both so a gradient is never referenced before it is defined.
+    tints.add(starTint(row.node));
+    for (const b of row.bodies) if (b.node.kind === "star") tints.add(starTint(b.node));
     // Half a step past the outermost glyph, so its centred label has room to sit.
     const reach = row.bodies.length
       ? row.bodies[row.bodies.length - 1].rx + ORRERY.step / 2
@@ -506,17 +556,7 @@ function renderOrrerySvg(root) {
   const h = Math.ceil(height);
 
   return `<svg class="orrery-svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Schematic map of the generated system">
-    <defs>
-      <radialGradient id="orreryStar" cx="38%" cy="34%" r="72%">
-        <stop offset="0%" stop-color="#fff6d0" />
-        <stop offset="55%" stop-color="#ffd479" />
-        <stop offset="100%" stop-color="#e79a2f" />
-      </radialGradient>
-      <radialGradient id="orreryGlow">
-        <stop offset="55%" stop-color="#ffd479" stop-opacity="0.3" />
-        <stop offset="100%" stop-color="#ffd479" stop-opacity="0" />
-      </radialGradient>
-    </defs>
+    <defs>${starTintDefs(tints)}</defs>
     ${rows.map(orreryRowSvg).join("")}
   </svg>`;
 }
