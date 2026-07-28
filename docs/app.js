@@ -428,10 +428,19 @@ function bodySvg(row, b) {
     // A companion star gets the same treatment as a row head, just smaller.
     parts.push(starGlyph(x, y, g.r));
   } else {
-    parts.push(`<circle cx="${n2(x)}" cy="${n2(y)}" r="${g.r}" fill="${g.fill}" />`);
+    const disc = `<circle cx="${n2(x)}" cy="${n2(y)}" r="${g.r}" fill="${g.fill}" />`;
     if (kids?.ring) {
-      const rot = `rotate(-18 ${n2(x)} ${n2(y)})`;
-      parts.push(`<ellipse cx="${n2(x)}" cy="${n2(y)}" rx="${g.r * 2}" ry="${n2(g.r * 0.55)}" fill="none" stroke="${RING_INK}" stroke-width="2.5" transform="${rot}" />`);
+      // Saturn-style: the ring's far side passes behind the planet and its near side in front, so
+      // the ellipse is split at its widest points and the disc drawn between the two halves. A
+      // single ellipse would sit wholly on top and read as a hoop in front of the planet.
+      // sweep=1 is the top (far) half, sweep=0 the bottom (near) half; both share the same tilt.
+      const rx = g.r * 2;
+      const ry = g.r * 0.55;
+      const half = (sweep) =>
+        `<path d="M${n2(x - rx)},${n2(y)} A${n2(rx)},${n2(ry)} 0 0 ${sweep} ${n2(x + rx)},${n2(y)}" fill="none" stroke="${RING_INK}" stroke-width="2.5" transform="rotate(-18 ${n2(x)} ${n2(y)})" />`;
+      parts.push(half(1), disc, half(0));
+    } else {
+      parts.push(disc);
     }
   }
 
