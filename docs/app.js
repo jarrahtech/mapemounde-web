@@ -116,6 +116,21 @@ function humanize(key) {
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }
 
+// A short headline for a body: stellar class for stars, else the most specific body-type label the
+// node offers. Each generator names that field differently (ad2300 body.world, btech planet/moon
+// planetType, aow bodyType), so this chain *is* per-generator knowledge — the one deliberate
+// exception to this client's generic-renderer rule, kept in a single ordered accessor so the tree
+// and the orrery caption a body identically. It is order-sensitive: reordering re-captions both.
+// The chain is also incomplete by construction (aow rings carry ringDensity, not ringType, so they
+// fall through to "Ring"). The real fix is a label on the node from mapemounde-api's view layer,
+// which would collapse this to `node.label || humanize(node.kind)`.
+function bodyLabel(node) {
+  return (
+    node.core?.stellarClass || node.bodyType || node.body?.world || node.planet?.planetType ||
+    node.moon?.planetType || node.ringType || humanize(node.kind)
+  );
+}
+
 // --- generic value renderer -------------------------------------------------------------------
 // Renders any JSON value the API can emit: quantities via quantity(), nested objects as labelled
 // grids (recursively), arrays as lists, primitives as text. This is what makes one renderer cover
@@ -249,6 +264,254 @@ function downloadSvg() {
 // Last traveller payload, so the name field can re-render the hex without re-fetching.
 let lastTravellerData = null;
 
+// --- system orrery ----------------------------------------------------------------------------
+// A schematic top-down view of a system: the star at the left, one concentric orbit ellipse per
+// body orbiting it, and a labelled glyph where that orbit crosses the baseline. Modelled on the
+// classic solar-system infographic, so it is deliberately *not* to scale — real top-level radii
+// span 0.03au to 8au, which would collapse every inner body into the star, so orbits are spaced
+// evenly by rank and the true radius is printed under each glyph instead.
+//
+// Stage 1 glyphs are placeholders keyed only on `kind`, which every generator shares, so the orrery
+// needs no per-generator code — the same principle the tree renderer follows. bodyLabel() is the
+// seam for making the glyphs representative of the data later.
+//
+// Moons are counted, not drawn: a btech system carries up to ~144 of them (≈40 on one planet), so
+// individual moon glyphs would be illegible. Rings are a child of their planet, so they render as a
+// Saturn-style ellipse on the parent's glyph rather than as a row entry of their own.
+//
+// Colours are literal hex rather than var(--…) on purpose: CSS custom properties do not survive an
+// SVG download, so the glyph fills mirror the .badge-* palette in styles.css instead of reading it.
+// Structural ink (orbit lines, labels) uses currentColor, so it stays theme-aware on screen and can
+// be baked to a solid colour the way downloadSvg() already does for the hex. NB no orrery download
+// is wired up yet — this only keeps that option open; recolouring a badge means editing both files.
+
+const ORRERY = {
+  step: 120, // horizontal gap between successive orbits
+  lead: 70, // gap from the star's edge out to the first orbit
+  maxRy: 110, // vertical half-height of the outermost orbit ellipse
+  rowGap: 250, // vertical distance from a star's row to a companion star's row
+  rootStar: 48, // radius of the system's primary; companions use the standard star glyph
+  labelTop: 44, // first label line, measured down from the orbit baseline
+  lineHeight: 18,
+  padX: 24,
+  padY: 22,
+};
+
+const MUTED_INK = "#8a94a3";
+const RING_INK = "#c2a8e0"; // rings and asteroid belts
+
+// Only two glyphs are ever drawn as row entries, because only a star's direct children get a row:
+// the planet disc, and the smaller disc of a companion star. Moons, moonlets and rings are always
+// nested under a planet, and a belt draws its own dots — so anything else the API puts in orbit
+// falls through to the neutral default rather than going missing.
+const GLYPH = {
+  star: { r: 26 }, // painted with the gradient, so no fill of its own
+  planet: { r: 16, fill: "#6ea8fe" },
+};
+const GLYPH_DEFAULT = { r: 10, fill: MUTED_INK };
+
+const glyphOf = (kind) => GLYPH[kind] || GLYPH_DEFAULT;
+const n2 = (v) => v.toFixed(2);
+
+// What a body's children contribute to its glyph, in one pass: moons and moonlets become a count,
+// a ring becomes the Saturn ellipse, and every other kind is counted as "other" rather than dropped.
+// The default matters — the folded tree below lists every child, so anything the orrery silently
+// discarded would make the two views of the same payload disagree on screen.
+function childSummary(node) {
+  let moons = 0;
+  let ring = false;
+  let other = 0;
+  for (const c of node.children || []) {
+    if (c.kind === "moon" || c.kind === "moonlet") moons += 1;
+    else if (c.kind === "ring") ring = true;
+    else other += 1;
+  }
+  return { moons, ring, other };
+}
+
+// Place every star and its orbiting bodies on a horizontal row. A companion star (aow systems are
+// often binary) is drawn in its primary's row *and* gets a row of its own beneath, tethered back to
+// its glyph — hence the recursion rather than a single flat pass. Every row starts at the left
+// margin rather than under the companion's glyph: a companion in the outermost orbit would
+// otherwise push its own row a screen-width to the right and leave the card mostly empty.
+function layoutOrrery(root) {
+  const rows = [];
+  let nextY = ORRERY.padY + Math.max(ORRERY.maxRy, ORRERY.rootStar);
+
+  const walk = (star, depth, link) => {
+    const originY = nextY;
+    nextY += ORRERY.rowGap;
+    const starR = depth === 0 ? ORRERY.rootStar : GLYPH.star.r;
+    const originX = ORRERY.padX + starR;
+    // Order by the radius actually drawn under each glyph, not by array position: the contract
+    // promises `id` is depth-first, never that `children` arrives sorted, and an unsorted row would
+    // contradict its own labels. Copied before sorting so the tree below still renders the payload's
+    // own order. Comparing raw values assumes one unit across a row, which holds — every body
+    // orbiting a star carries `au` (it is the nested ring/moon radii that switch to km).
+    const orbitOf = (node) => node.orbit?.radius?.value ?? Infinity;
+    const kids = [...(star.children || [])].sort((a, b) => orbitOf(a) - orbitOf(b));
+    const lead = starR + ORRERY.lead;
+    const maxRx = lead + (kids.length - 1) * ORRERY.step;
+    // Only rx is stored per body; x/y follow from the row, so they are read off it at draw time
+    // rather than copied onto every child.
+    const bodies = kids.map((node, i) => {
+      const rx = lead + i * ORRERY.step;
+      // Squash the ellipses sub-linearly so the outermost orbit tops out at maxRy: a straight
+      // rx * ratio would make a 14-body system over 900px tall.
+      return { node, rx, ry: ORRERY.maxRy * Math.sqrt(rx / maxRx) };
+    });
+
+    rows.push({ node: star, x: originX, y: originY, r: starR, bodies, link });
+    for (const b of bodies) {
+      if (b.node.kind === "star" && (b.node.children || []).length) {
+        // Carry the radius the layout chose, so the tether stays attached if the glyph is resized.
+        walk(b.node, depth + 1, { x: originX + b.rx, y: originY, r: glyphOf("star").r });
+      }
+    }
+  };
+
+  walk(root, 0, null);
+  return rows;
+}
+
+function svgText(x, y, content, size, fill, weight = 400) {
+  return `<text x="${n2(x)}" y="${n2(y)}" text-anchor="middle" font-family="system-ui, sans-serif" font-size="${size}" font-weight="${weight}" fill="${fill}">${content}</text>`;
+}
+
+// The SVG twin of quantity(): a <tspan> for the unit, since an HTML <span> would not render inside
+// an <svg>. The number is cut to three significant figures because this is a headline label, not a
+// readout — formatNumber's 4dp turns an orbit into "85.2013au". The tree below still shows the
+// full-precision value.
+function orbitLabel(q) {
+  if (q == null) return "";
+  const v = q.value;
+  // formatNumber already handles the non-number/non-finite contract; only the rounding differs.
+  const figure =
+    typeof v === "number" && isFinite(v) ? String(Number(v.toPrecision(3))) : formatNumber(v);
+  return `${escapeHtml(figure)}<tspan fill="${MUTED_INK}" dx="2">${escapeHtml(q.unit)}</tspan>`;
+}
+
+function starGlyph(x, y, r) {
+  return `<circle cx="${n2(x)}" cy="${n2(y)}" r="${n2(r * 1.5)}" fill="url(#orreryGlow)" />
+    <circle cx="${n2(x)}" cy="${n2(y)}" r="${n2(r)}" fill="url(#orreryStar)" />`;
+}
+
+// Fixed offsets rather than Math.random(), so the same seed always draws the same belt — a system
+// that reshuffled its asteroids on every re-render would look like the data had changed.
+const BELT_JITTER = [0, 7, -5, 3, -8, 6, -2, 8, -6, 4, -3];
+
+function beltGlyph(row, b) {
+  const last = BELT_JITTER.length - 1;
+  return BELT_JITTER.map((jitter, k) => {
+    const t = (k / last - 0.5) * 0.34; // a short arc of the orbit, centred on the baseline
+    const rx = b.rx + jitter;
+    const ry = b.ry * (rx / b.rx);
+    const cx = row.x + rx * Math.cos(t);
+    const cy = row.y + ry * Math.sin(t);
+    return `<circle cx="${n2(cx)}" cy="${n2(cy)}" r="${k % 3 === 0 ? 3 : 2}" fill="${RING_INK}" />`;
+  }).join("");
+}
+
+function bodySvg(row, b) {
+  const node = b.node;
+  const g = glyphOf(node.kind);
+  // A companion star needs no summary: layoutOrrery gives every star with children a row of its own,
+  // so they are all drawn below rather than absorbed into this glyph.
+  const kids = node.kind === "star" ? null : childSummary(node);
+  const x = row.x + b.rx;
+  const y = row.y;
+  const parts = [];
+
+  if (node.kind === "asteroidBelt") {
+    parts.push(beltGlyph(row, b));
+  } else if (node.kind === "star") {
+    // A companion star gets the same treatment as a row head, just smaller.
+    parts.push(starGlyph(x, y, g.r));
+  } else {
+    parts.push(`<circle cx="${n2(x)}" cy="${n2(y)}" r="${g.r}" fill="${g.fill}" />`);
+    if (kids?.ring) {
+      const rot = `rotate(-18 ${n2(x)} ${n2(y)})`;
+      parts.push(`<ellipse cx="${n2(x)}" cy="${n2(y)}" rx="${g.r * 2}" ry="${n2(g.r * 0.55)}" fill="none" stroke="${RING_INK}" stroke-width="2.5" transform="${rot}" />`);
+    }
+  }
+
+  // Label block: type, then the real orbit radius, then what is in orbit around it. Kept to three
+  // lines (satellite counts share one) so every row bottoms out at the same LABEL_DEPTH.
+  let line = y + ORRERY.labelTop;
+  parts.push(svgText(x, line, escapeHtml(bodyLabel(node)), 12, "currentColor", 600));
+  if (node.orbit?.radius) {
+    line += ORRERY.lineHeight;
+    parts.push(svgText(x, line, orbitLabel(node.orbit.radius), 11, "currentColor"));
+  }
+  const counts = [];
+  if (kids?.moons) counts.push(`${kids.moons} moon${kids.moons === 1 ? "" : "s"}`);
+  if (kids?.other) counts.push(`${kids.other} other`);
+  if (counts.length) {
+    line += ORRERY.lineHeight;
+    parts.push(svgText(x, line, counts.join(" · "), 11, MUTED_INK));
+  }
+  return parts.join("");
+}
+
+function orreryRowSvg(row) {
+  const parts = [];
+  // Dashed tether from the companion's glyph in its primary's row down to its own row. An S-curve
+  // rather than a straight line, since the two ends are usually far apart horizontally.
+  if (row.link) {
+    const sx = row.link.x;
+    const sy = row.link.y + row.link.r + 4;
+    const ex = row.x;
+    const ey = row.y - row.r - 4;
+    const mid = sy + (ey - sy) / 2;
+    parts.push(`<path d="M${n2(sx)},${n2(sy)} C${n2(sx)},${n2(mid)} ${n2(ex)},${n2(mid)} ${n2(ex)},${n2(ey)}" fill="none" stroke="currentColor" stroke-opacity="0.3" stroke-dasharray="4 4" />`);
+  }
+  // Orbits first, so the glyphs sit on top of the lines.
+  for (const b of row.bodies) {
+    parts.push(`<ellipse cx="${n2(row.x)}" cy="${n2(row.y)}" rx="${n2(b.rx)}" ry="${n2(b.ry)}" fill="none" stroke="currentColor" stroke-opacity="0.28" stroke-width="1" />`);
+  }
+  parts.push(starGlyph(row.x, row.y, row.r));
+  parts.push(svgText(row.x, row.y + row.r + 22, escapeHtml(bodyLabel(row.node)), 13, "currentColor", 600));
+  for (const b of row.bodies) parts.push(bodySvg(row, b));
+  return parts.join("");
+}
+
+// How far a row's label block reaches below its baseline: three lines plus a descender.
+const LABEL_DEPTH = ORRERY.labelTop + 2 * ORRERY.lineHeight + 8;
+
+function renderOrrerySvg(root) {
+  const rows = layoutOrrery(root);
+
+  let width = 0;
+  let height = 0;
+  for (const row of rows) {
+    // Half a step past the outermost glyph, so its centred label has room to sit.
+    const reach = row.bodies.length
+      ? row.bodies[row.bodies.length - 1].rx + ORRERY.step / 2
+      : row.r;
+    width = Math.max(width, row.x + reach + ORRERY.padX);
+    // Whichever is deeper: the row's outermost orbit, or its label block. Taken over every row
+    // rather than the last one, so the canvas does not depend on the order layoutOrrery emits.
+    height = Math.max(height, row.y + Math.max(ORRERY.maxRy, LABEL_DEPTH) + ORRERY.padY);
+  }
+  const w = Math.ceil(width);
+  const h = Math.ceil(height);
+
+  return `<svg class="orrery-svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Schematic map of the generated system">
+    <defs>
+      <radialGradient id="orreryStar" cx="38%" cy="34%" r="72%">
+        <stop offset="0%" stop-color="#fff6d0" />
+        <stop offset="55%" stop-color="#ffd479" />
+        <stop offset="100%" stop-color="#e79a2f" />
+      </radialGradient>
+      <radialGradient id="orreryGlow">
+        <stop offset="55%" stop-color="#ffd479" stop-opacity="0.3" />
+        <stop offset="100%" stop-color="#ffd479" stop-opacity="0" />
+      </radialGradient>
+    </defs>
+    ${rows.map(orreryRowSvg).join("")}
+  </svg>`;
+}
+
 // --- tree renderer ----------------------------------------------------------------------------
 
 // Fields every node carries; everything else is generator-specific richness rendered generically.
@@ -263,10 +526,7 @@ function nonEmpty(obj) {
 }
 
 function renderNode(node) {
-  // A short headline: stellar class for stars, else the most specific body-type label available.
-  const title =
-    node.core?.stellarClass || node.bodyType || node.planet?.planetType ||
-    node.moon?.planetType || node.ringType || humanize(node.kind);
+  const title = bodyLabel(node);
   const orbitRadius = node.orbit?.radius ? quantity(node.orbit.radius) : "";
 
   const sections = [];
@@ -303,7 +563,16 @@ function renderMeta(data, extras) {
 function render(data) {
   if (data.root) {
     const extras = Object.entries(data).filter(([k]) => !["generator", "seed", "root"].includes(k));
-    return `<div class="card">${renderMeta(data, extras)}<ul class="tree">${renderNode(data.root)}</ul></div>`;
+    // The orrery carries the shape of the system; the full per-body detail folds away below it,
+    // since a btech tree runs to ~150 nodes.
+    return `<div class="card orrery-card">${renderOrrerySvg(data.root)}</div>
+      <div class="card">
+        ${renderMeta(data, extras)}
+        <details class="tree-wrap">
+          <summary>System detail</summary>
+          <ul class="tree">${renderNode(data.root)}</ul>
+        </details>
+      </div>`;
   }
   // Traveller is a flat UWP record; show it as the Classic Traveller system hex, with the UWP
   // status line (`wdf`) rendered below the hex.
