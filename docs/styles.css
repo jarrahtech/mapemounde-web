@@ -151,7 +151,7 @@ section#result {
 .hover-card {
   position: absolute;
   z-index: 5;
-  max-width: 280px;
+  max-width: 320px;
   padding: 0.5rem 0.7rem 0.55rem;
   background: var(--panel-2);
   border: 1px solid var(--border);
@@ -212,6 +212,16 @@ section#result {
 .hover-card .grid {
   font-size: 0.78rem;
   gap: 0.05rem 0.7rem;
+}
+
+.hover-card .comp {
+  min-width: 170px;
+  margin: 0.2rem 0 0.1rem;
+}
+
+.hover-card .comp-key {
+  font-size: inherit;
+  gap: 0 0.6rem;
 }
 
 .card {
@@ -495,6 +505,48 @@ code {
 
 .grid dd {
   margin: 0;
+}
+
+/* Atmosphere composition: a stacked bar plus a key, in place of a grid of numbers. */
+.comp {
+  min-width: 200px;
+  margin: 0.15rem 0 0.35rem;
+}
+
+.comp-bar {
+  display: flex;
+  height: 10px;
+  border-radius: 5px;
+  overflow: hidden;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+}
+
+.comp-bar span {
+  display: block;
+  height: 100%;
+  min-width: 2px; /* a trace gas still shows as a sliver */
+}
+
+.comp-key {
+  list-style: none;
+  margin: 0.25rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.1rem 0.8rem;
+  font-size: 0.85rem;
+}
+
+.comp-key li::before {
+  content: "";
+  display: inline-block;
+  width: 0.6em;
+  height: 0.6em;
+  border-radius: 50%;
+  background: var(--c);
+  margin-right: 0.35em;
+  vertical-align: 0.05em;
 }
 
 /* Nested grids (e.g. an AoW world's climate/atmosphere) indent slightly for legibility. */

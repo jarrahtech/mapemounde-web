@@ -165,9 +165,73 @@ function renderValue(v) {
 function renderGrid(entries) {
   const rows = entries
     .filter(([, val]) => val !== null && val !== undefined)
-    .map(([k, val]) => `<dt>${escapeHtml(humanize(k))}</dt><dd>${renderValue(val)}</dd>`)
+    .map(([k, val]) => {
+      const html = k === "composition" && isComposition(val) ? compositionHtml(val) : renderValue(val);
+      return `<dt>${escapeHtml(humanize(k))}</dt><dd>${html}</dd>`;
+    })
     .join("");
   return rows ? `<dl class="grid">${rows}</dl>` : DASH;
+}
+
+// --- composition bar --------------------------------------------------------------------------
+// A `composition` object (gas → amount) draws as a stacked bar with a key instead of a grid of
+// numbers. Both books emit one under that key — btech `habitability.composition` as fractions that
+// sum to 1, aow `atmosphere.composition` as amounts that sum to its `totalMass` — so the bar
+// normalises to the total and, when the values are not already fractions, prints the raw amount
+// beside each share. Detected by the shared key and shape, not per generator. One colour per gas
+// across both spellings (Methane is CH4), so a GM comparing worlds sees a gas in a constant colour;
+// gases outside the table take neutral greys by rank.
+
+const GAS_TINTS = {
+  N2: "#6a8fc4", Nitrogen: "#6a8fc4",
+  O2: "#4fbf7a", Oxygen: "#4fbf7a",
+  CO2: "#c98b3f", CarbonDioxide: "#c98b3f",
+  H2O: "#3aa08e", WaterVapour: "#3aa08e",
+  CH4: "#7f6bd1", Methane: "#7f6bd1",
+  NH3: "#d07aa8", Ammonia: "#d07aa8",
+  SO2: "#e3c45a", SulfurDioxide: "#e3c45a",
+  H2: "#e6eef4", Hydrogen: "#e6eef4",
+  He: "#c2a8e0", Helium: "#c2a8e0",
+  Ar: "#9c8f7c", Argon: "#9c8f7c",
+  Cl2: "#a6c94a", Chlorine: "#a6c94a",
+  N2O: "#8fcfe0", NitrousOxide: "#8fcfe0",
+};
+const GAS_FALLBACK = ["#8a94a3", "#b3bcc8", "#5f6b7a", "#d0d6de"];
+
+function isComposition(v) {
+  if (!v || typeof v !== "object" || Array.isArray(v)) return false;
+  const values = Object.values(v);
+  return values.length > 0 && values.every((x) => typeof x === "number" && isFinite(x) && x >= 0) && values.some((x) => x > 0);
+}
+
+// Formula names (CO2, H2O, Cl2: element symbols and counts) get subscript digits — Unicode ones, so
+// they also work in tooltips and SVG text; word names (CarbonDioxide) are spaced like other keys.
+const SUBSCRIPT_DIGITS = "₀₁₂₃₄₅₆₇₈₉";
+const isFormula = (name) => /^([A-Z][a-z]?\d*)+$/.test(name);
+const gasLabel = (name) =>
+  isFormula(name) ? name.replace(/\d/g, (d) => SUBSCRIPT_DIGITS[Number(d)]) : humanize(name);
+
+// `amounts` adds the raw amount beside each share when the values are not already fractions (the
+// fold-out wants it; the hover card shows shares only).
+function compositionHtml(map, amounts = true) {
+  const total = Object.values(map).reduce((a, b) => a + b, 0);
+  const fractions = !amounts || Math.abs(total - 1) < 0.01; // already shares: no raw amount to add
+  let spare = 0;
+  const parts = Object.entries(map)
+    .filter(([, v]) => v > 0)
+    .sort((a, b) => b[1] - a[1])
+    .map(([gas, v]) => ({
+      gas, v, share: v / total,
+      tint: GAS_TINTS[gas] || GAS_FALLBACK[spare++ % GAS_FALLBACK.length],
+    }));
+  const pct = (p) => (p >= 0.1 ? `${Math.round(p * 100)}%` : p >= 0.001 ? `${(p * 100).toFixed(1)}%` : "<0.1%");
+  const bar = parts
+    .map((p) => `<span style="flex-basis:${(p.share * 100).toFixed(2)}%;background:${p.tint}" title="${escapeHtml(gasLabel(p.gas))} ${pct(p.share)}"></span>`)
+    .join("");
+  const key = parts
+    .map((p) => `<li style="--c:${p.tint}">${escapeHtml(gasLabel(p.gas))} ${pct(p.share)}${fractions ? "" : `<span class="unit">${escapeHtml(sig3(p.v))}</span>`}</li>`)
+    .join("");
+  return `<div class="comp"><div class="comp-bar">${bar}</div><ul class="comp-key">${key}</ul></div>`;
 }
 
 // --- traveller hex diagram --------------------------------------------------------------------
@@ -1123,6 +1187,8 @@ function hoverCardHtml(node, isPrimary) {
     if (isQuantity(g) && g.unit === "m/s²") add("Gravity", unitHtml(g.value / G0, "g"));
     add("Temperature", tempFact(node));
     add("Atmosphere", atmosphereFact(node));
+    const gases = node.planet?.habitability?.composition ?? node.world?.atmosphere?.composition;
+    if (isComposition(gases)) add("Composition", compositionHtml(gases, false));
     const water = waterFraction(node);
     if (water !== null) add("Water", `${Math.round(water * 100)}% cover`);
     add("Orbit", orbitFact(node));

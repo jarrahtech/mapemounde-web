@@ -147,8 +147,9 @@ Small, mostly no API change. Together these turn "seven identical discs" into a 
       API suggestion 4. This is text, but it makes every fold-out section usable. [S]
 - [ ] **Earth-comparison bars** beside mass, radius and gravity (Jupiter as the reference
       above ~10 Earth masses). Depends on the unit normaliser. [M]
-- [ ] **Atmosphere composition as a stacked bar.** btech `habitability.composition` and aow
-      `atmosphere.composition` are already proportion maps. [S]
+- [x] **Atmosphere composition as a stacked bar.** Detected by the shared `composition` key;
+      normalised to the total (aow's values are amounts summing to `totalMass`, shown beside
+      each share), one colour per gas across both books' spellings. Also on the hover card. [S]
 - [ ] **Moon system as a mini strip.** For a planet with many moons, a compact log-radius
       strip of dots with the moon nodes folded beneath it. btech's fold-out is currently
       dominated by moon records (a 31-moon planet is ~30 screens tall). [M]
