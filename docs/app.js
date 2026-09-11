@@ -342,26 +342,24 @@ function starTint(node) {
 }
 
 // Only two glyphs are ever drawn as row entries, because only a star's direct children get a row:
-// the planet disc, and the smaller disc of a companion star. Moons, moonlets and rings are always
-// nested under a planet, and a belt draws its own dots — so anything else the API puts in orbit
-// falls through to the neutral default rather than going missing.
-const GLYPH = {
-  star: { r: 26 }, // painted with the gradient, so no fill of its own
-  planet: { fill: "#6ea8fe" }, // radius comes from planetRadiusPx()
-};
+// the planet disc (sized by planetRadiusPx) and a companion star (painted with its class gradient,
+// sized by starRadiusPx). Moons, moonlets and rings are always nested under a planet, and a belt
+// draws its own dots — so anything else the API puts in orbit falls through to the neutral default
+// rather than going missing.
+const PLANET_FILL = "#6ea8fe";
 const GLYPH_DEFAULT = { r: 10, fill: MUTED_INK };
 
-const glyphOf = (kind) => GLYPH[kind] || GLYPH_DEFAULT;
-
-// A body's radius in Earth radii, whatever unit its generator used: ad2300 and btech send km, aow
-// sends m. Unknown units give null rather than a guess. (Earth-relative values from the API would
-// retire this table — see TODO.md, API suggestion 4.)
+// A radius quantity in metres, whatever unit its generator used: planets arrive in km (ad2300,
+// btech) or m (aow); stars in R☉, except white and brown dwarfs, which arrive in km. Unknown units
+// give null rather than a guess. (Earth-relative values from the API would retire this table — see
+// TODO.md, API suggestion 4.)
 const EARTH_RADIUS_M = 6.371e6;
-const RADIUS_UNIT_M = { m: 1, km: 1e3, "R🜨": EARTH_RADIUS_M, "R⊕": EARTH_RADIUS_M };
+const SUN_RADIUS_M = 6.957e8;
+const RADIUS_UNIT_M = { m: 1, km: 1e3, "R🜨": EARTH_RADIUS_M, "R⊕": EARTH_RADIUS_M, "R☉": SUN_RADIUS_M };
 
-function earthRadii(q) {
+function radiusM(q) {
   const scale = q && RADIUS_UNIT_M[q.unit];
-  return scale && typeof q.value === "number" && isFinite(q.value) ? (q.value * scale) / EARTH_RADIUS_M : null;
+  return scale && typeof q.value === "number" && isFinite(q.value) ? q.value * scale : null;
 }
 
 // Planet disc radius on a log scale of the body's real radius. Log rather than linear because
@@ -373,10 +371,34 @@ const PLANET_PX = { earth: 10, min: 5, max: 22 };
 PLANET_PX.perDecade = (PLANET_PX.max - PLANET_PX.earth) / Math.log10(11.2);
 
 function planetRadiusPx(node) {
-  const re = earthRadii(node.core?.radius);
-  if (re === null) return PLANET_PX.earth;
-  const px = PLANET_PX.earth + PLANET_PX.perDecade * Math.log10(re);
+  const m = radiusM(node.core?.radius);
+  if (m === null) return PLANET_PX.earth;
+  const px = PLANET_PX.earth + PLANET_PX.perDecade * Math.log10(m / EARTH_RADIUS_M);
   return Math.min(PLANET_PX.max, Math.max(PLANET_PX.min, px));
+}
+
+// Companion star glyph radius, on a log scale *relative to the system's primary*, which keeps its
+// fixed row-head size. Stars get a scale of their own rather than sharing the planets' because a
+// star is a hundred times a planet's radius: one scale for both would make every planet a pixel.
+// Equal stars draw equal, a companion a tenth of the primary's radius draws at half size, and the
+// floor keeps a white dwarf — Earth-sized in reality — a small star rather than a planet, since it
+// still heads a row of its own. The cap sits a little above the primary because the root is not
+// always the largest star (a giant round a white dwarf occurs), but stays low enough to fit the
+// row spacing. A radius the client can't compare draws at the floor.
+const STAR_SCALE = { perDecade: 0.5, min: 0.4, max: 1.25 };
+
+function starRadiusPx(star, primary) {
+  const rs = radiusM(star.core?.radius);
+  const rp = radiusM(primary.core?.radius);
+  const scale = rs !== null && rp > 0 ? 1 + STAR_SCALE.perDecade * Math.log10(rs / rp) : STAR_SCALE.min;
+  return ORRERY.rootStar * Math.min(STAR_SCALE.max, Math.max(STAR_SCALE.min, scale));
+}
+
+// Glyph radius for any body in a star's row. Belts ignore it (they draw their own dots).
+function bodyRadiusPx(node, primary) {
+  if (node.kind === "star") return starRadiusPx(node, primary);
+  if (node.kind === "planet") return planetRadiusPx(node);
+  return GLYPH_DEFAULT.r;
 }
 
 // What a body's children contribute to its glyph, in one pass: moons and moonlets become a count,
@@ -407,7 +429,8 @@ function layoutOrrery(root) {
   const walk = (star, depth, link) => {
     const originY = nextY;
     nextY += ORRERY.rowGap;
-    const starR = depth === 0 ? ORRERY.rootStar : GLYPH.star.r;
+    // A companion heads its own row at the size it was drawn in its primary's row (carried in link).
+    const starR = depth === 0 ? ORRERY.rootStar : link.r;
     const originX = ORRERY.padX + starR;
     // Order by the radius actually drawn under each glyph, not by array position: the contract
     // promises `id` is depth-first, never that `children` arrives sorted, and an unsorted row would
@@ -418,20 +441,21 @@ function layoutOrrery(root) {
     const kids = [...(star.children || [])].sort((a, b) => orbitOf(a) - orbitOf(b));
     const lead = starR + ORRERY.lead;
     const maxRx = lead + (kids.length - 1) * ORRERY.step;
-    // Only rx is stored per body; x/y follow from the row, so they are read off it at draw time
-    // rather than copied onto every child.
+    // Only rx and the glyph radius are stored per body; x/y follow from the row, so they are read
+    // off it at draw time rather than copied onto every child.
     const bodies = kids.map((node, i) => {
       const rx = lead + i * ORRERY.step;
       // Squash the ellipses sub-linearly so the outermost orbit tops out at maxRy: a straight
       // rx * ratio would make a 14-body system over 900px tall.
-      return { node, rx, ry: ORRERY.maxRy * Math.sqrt(rx / maxRx) };
+      return { node, rx, ry: ORRERY.maxRy * Math.sqrt(rx / maxRx), r: bodyRadiusPx(node, root) };
     });
 
     rows.push({ node: star, x: originX, y: originY, r: starR, bodies, link });
     for (const b of bodies) {
       if (b.node.kind === "star" && (b.node.children || []).length) {
-        // Carry the radius the layout chose, so the tether stays attached if the glyph is resized.
-        walk(b.node, depth + 1, { x: originX + b.rx, y: originY, r: GLYPH.star.r });
+        // Carry the radius the layout chose, so the tether stays attached and the companion's own
+        // row head is the same size as its glyph up here.
+        walk(b.node, depth + 1, { x: originX + b.rx, y: originY, r: b.r });
       }
     }
   };
@@ -494,7 +518,7 @@ function beltGlyph(row, b) {
 
 function bodySvg(row, b) {
   const node = b.node;
-  const g = glyphOf(node.kind);
+  const r = b.r;
   // A companion star needs no summary: layoutOrrery gives every star with children a row of its own,
   // so they are all drawn below rather than absorbed into this glyph.
   const kids = node.kind === "star" ? null : childSummary(node);
@@ -505,11 +529,11 @@ function bodySvg(row, b) {
   if (node.kind === "asteroidBelt") {
     parts.push(beltGlyph(row, b));
   } else if (node.kind === "star") {
-    // A companion star gets the same treatment as a row head, just smaller.
-    parts.push(starGlyph(x, y, g.r, starTint(node)));
+    // A companion star gets the same treatment as a row head, at its relative size.
+    parts.push(starGlyph(x, y, r, starTint(node)));
   } else {
-    const r = node.kind === "planet" ? planetRadiusPx(node) : g.r;
-    const disc = `<circle cx="${n2(x)}" cy="${n2(y)}" r="${n2(r)}" fill="${g.fill}" />`;
+    const fill = node.kind === "planet" ? PLANET_FILL : GLYPH_DEFAULT.fill;
+    const disc = `<circle cx="${n2(x)}" cy="${n2(y)}" r="${n2(r)}" fill="${fill}" />`;
     if (kids?.ring) {
       // Saturn-style: the ring's far side passes behind the planet and its near side in front, so
       // the ellipse is split at its widest points and the disc drawn between the two halves. A
@@ -528,8 +552,10 @@ function bodySvg(row, b) {
   }
 
   // Label block: type, then the real orbit radius, then what is in orbit around it. Kept to three
-  // lines (satellite counts share one) so every row bottoms out at the same LABEL_DEPTH.
-  let line = y + ORRERY.labelTop;
+  // lines (satellite counts share one) so every row bottoms out at the same LABEL_DEPTH. A companion
+  // drawn near the primary's size reaches below labelTop, so its label steps down to clear it, the
+  // same clearance a row head's label gets.
+  let line = y + Math.max(ORRERY.labelTop, r + 22);
   parts.push(svgText(x, line, escapeHtml(bodyLabel(node)), 12, "currentColor", 600));
   if (node.orbit?.radius) {
     line += ORRERY.lineHeight;

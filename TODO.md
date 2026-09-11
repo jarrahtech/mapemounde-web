@@ -64,10 +64,10 @@ Small, mostly no API change. Together these turn "seven identical discs" into a 
       back button works, and a page with a seed auto-generates on load. [S]
 - [x] **Planet glyphs sized on a planet log scale.** Radius from `core.radius` normalised to
       Earth radii; 5 px floor for a dwarf up to a 22 px cap that Jupiter lands on. [S–M]
-- [ ] **Star glyphs sized on a star log scale relative to the primary.** Primary stays the
+- [x] **Star glyphs sized on a star log scale relative to the primary.** Primary stays the
       row-head size; a companion's radius is scaled by log(R_companion / R_primary), clamped
-      so a brown dwarf is visibly smaller but never planet-sized. Needs star radius normalised
-      to R☉ (some arrive in km). [S]
+      so a white dwarf is visibly smaller but never planet-sized. Star radius is normalised
+      from R☉ or km (white and brown dwarfs arrive in km). [S]
 - [ ] **Planet colour by class.** Banded tan for gas giants, pale cyan for ice giants, grey
       for failed cores / leftovers, terrestrials tinted by temperature from white ice through
       blue-green temperate to ochre desert and yellow hothouse. Needs a class per body — see
@@ -155,9 +155,12 @@ Small, mostly no API change. Together these turn "seven identical discs" into a 
   0.3 R⊕ dwarf hits the 5 px floor. Moons should reuse the same scale with a 4 px floor, so
   they read as dots.
 - **Stars:** the primary keeps its fixed row-head radius. A companion is drawn at
-  `r_primary · clamp(1 + k · log10(R_c / R_p), 0.3, 1)`. A T dwarf is Jupiter-sized in
-  reality, but it stays on the star scale on purpose: it is a star in the tree, it heads a
-  row, and shrinking it to planet size would make the row look headless.
+  `r_primary · clamp(1 + 0.5 · log10(R_c / R_root), 0.4, 1.25)` (`starRadiusPx()` in
+  `app.js`): equal stars draw equal, a tenth of the radius draws at half size. A T dwarf is
+  Jupiter-sized in reality, but it stays on the star scale on purpose: it is a star in the
+  tree, it heads a row, and shrinking it to planet size would make the row look headless.
+  The cap is above 1 because the root is not always the largest star: one AoW system in 80
+  puts a K3 III giant round a D4 white-dwarf primary.
 - Both need radius normalised first (planet km vs m; star R☉ vs km). Do the normalisation in
   one place, ideally the API (suggestion 4).
 
