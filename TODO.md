@@ -113,8 +113,13 @@ Small, mostly no API change. Together these turn "seven identical discs" into a 
       consideration); no client-side derivation from luminosity, which would present a zone
       the book never specified. Every star in a multi-star system gets its own band in its own
       row. [M]
-- [ ] **Hover card on a glyph.** Four or five headline facts: class, radius vs Earth, gravity,
-      temperature, atmosphere. HTML popover positioned off the SVG element. [M]
+- [x] **Hover card on a glyph.** Class and tint, radius in R⊕, gravity in g, temperature (the
+      book's word for ad2300; surface figure for btech/aow), atmosphere, water, orbit and period,
+      moons, the book's habitability flag; stars get mass, radius, luminosity, temperature and
+      separation. Hover shows, tap pins (touch), tap elsewhere or Escape unpins. [M]
+- [ ] **Demote the legend to an ⓘ popover** now that the hover card explains any single body;
+      keep it one tap away for the marks a hover cannot explain (a GM scanning for green dots).
+      Open on first visit, remembered in localStorage. [S]
 - [ ] **Revisit habitability marking.** The books' own flags are rare: over 40 seeds ad2300
       sets `humanOxygen` on exactly its five Garden worlds, btech `habitable` on two of 331
       planets (one of 328 with LifeFriendly stars), and aow `breathable` on none of 379 by
@@ -130,8 +135,9 @@ Small, mostly no API change. Together these turn "seven identical discs" into a 
       btech moons mostly carry only core figures (about one in ten has a `moon` record), so
       they would stay grey or be tinted from density alone. Reuse the planet tint rules rather
       than inventing a moon scale. [S–M]
-- [ ] **Click a glyph to open its node.** Expands the fold-out and scrolls to that body;
-      hovering a tree node highlights its glyph. Node ids already exist. [S–M]
+- [x] **Click a glyph to open its node.** The hover card's "Show in system detail" action (or
+      a double-click on the glyph) opens the fold-out, scrolls the record into view and flashes
+      it; hovering a record lights its glyph in the map. [S–M]
 - [ ] **Planet portrait in the node head.** The orrery glyph at ~24 px beside the badge so
       tree and orrery share an identity. [XS once glyphs exist]
 - [ ] **Humanised units in the fold-out.** Periods in days/years rather than seconds, planet

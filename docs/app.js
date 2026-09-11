@@ -643,13 +643,15 @@ function layoutOrrery(root, available = 0) {
 // an <svg>. The number is cut to three significant figures because this is a headline label, not a
 // readout — formatNumber's 4dp turns an orbit into "85.2013au". The tree below still shows the
 // full-precision value.
+// Three significant figures, for headline labels rather than readouts (formatNumber's 4dp turns an
+// orbit into "85.2013au"); formatNumber still handles the non-number/non-finite contract.
+function sig3(v) {
+  return typeof v === "number" && isFinite(v) ? String(Number(v.toPrecision(3))) : formatNumber(v);
+}
+
 function orbitLabel(q) {
   if (q == null) return "";
-  const v = q.value;
-  // formatNumber already handles the non-number/non-finite contract; only the rounding differs.
-  const figure =
-    typeof v === "number" && isFinite(v) ? String(Number(v.toPrecision(3))) : formatNumber(v);
-  return `${escapeHtml(figure)}<tspan fill="${MUTED_INK}" dx="2">${escapeHtml(q.unit)}</tspan>`;
+  return `${escapeHtml(sig3(q.value))}<tspan fill="${MUTED_INK}" dx="2">${escapeHtml(q.unit)}</tspan>`;
 }
 
 // `ids` prefixes the gradient ids, so the legend's swatch and the orrery can share one page.
@@ -755,6 +757,11 @@ function orbitArc(row, b) {
   return `<path d="M${n2(row.x + dx)},${n2(row.y - dy)} A${n2(b.rx)},${n2(b.ry)} 0 0 1 ${n2(row.x + dx)},${n2(row.y + dy)}" fill="none" stroke="currentColor" stroke-opacity="0.28" stroke-width="1" />`;
 }
 
+// A glyph the hover card can identify: the node id is the key back into the payload.
+function hoverable(node, svg) {
+  return `<g class="orrery-body" data-id="${escapeHtml(node.id)}">${svg}</g>`;
+}
+
 function orreryRowSvg(row) {
   const parts = [];
   // Dashed tether from the companion's glyph in its primary's row down to its own row. An S-curve
@@ -785,10 +792,10 @@ function orreryRowSvg(row) {
     for (const b of row.bodies) {
       parts.push(`<ellipse cx="${n2(row.x)}" cy="${n2(row.y)}" rx="${n2(b.rx)}" ry="${n2(b.ry)}" fill="none" stroke="currentColor" stroke-opacity="0.28" stroke-width="1" />`);
     }
-    parts.push(starGlyph(row.x, row.y, row.r, starTint(row.node)));
-    parts.push(svgText(row.x, row.y + row.r + 22, escapeHtml(bodyLabel(row.node)), 13, "currentColor", 600));
+    parts.push(hoverable(row.node, starGlyph(row.x, row.y, row.r, starTint(row.node)) +
+      svgText(row.x, row.y + row.r + 22, escapeHtml(bodyLabel(row.node)), 13, "currentColor", 600)));
   }
-  for (const b of row.bodies) parts.push(bodySvg(row, b));
+  for (const b of row.bodies) parts.push(hoverable(b.node, bodySvg(row, b)));
   return parts.join("");
 }
 
@@ -937,7 +944,7 @@ function renderNode(node) {
   }
 
   const kids = (node.children || []).map(renderNode).join("");
-  return `<li class="node">
+  return `<li class="node" data-id="${escapeHtml(node.id)}">
     <div class="node-head">
       <span class="badge badge-${escapeHtml(node.kind)}">${escapeHtml(node.kind)}</span>
       <span class="node-title">${escapeHtml(title)}</span>
@@ -983,6 +990,245 @@ function render(data) {
     </div>`;
 }
 
+// --- hover card -------------------------------------------------------------------------------
+// Headline facts for the body under the pointer, as a small HTML card beside its glyph: what a GM
+// wants to know before deciding whether to open the fold-out. Hover shows it; leaving hides it after
+// a short grace period, long enough to move the pointer onto the card and use its action. A tap pins
+// it, since touch has no hover, and a tap elsewhere or Escape unpins. The card is a child of
+// #rendered (not the orrery card, whose overflow would clip it). Its action, and a double-click on
+// the glyph, jump to the body's record in the fold-out; hovering a record lights its glyph in return.
+
+const G0 = 9.80665; // m/s² per g
+
+let nodeIndex = new Map(); // id → node for the last system, so a glyph's data-id finds its payload
+let pinnedId = null;
+let shownId = null; // the body the card currently describes, pinned or not
+let hideTimer = 0;
+
+function indexNodes(root) {
+  const index = new Map();
+  const walk = (n) => {
+    index.set(String(n.id), n);
+    (n.children || []).forEach(walk);
+  };
+  walk(root);
+  return index;
+}
+
+function unitHtml(value, unit) {
+  return `${escapeHtml(sig3(value))}<span class="unit">${escapeHtml(unit)}</span>`;
+}
+
+// An orbital period in hours, days or Earth years, whichever keeps the number readable.
+function periodFact(q) {
+  if (!isQuantity(q) || q.unit !== "s") return "";
+  const h = q.value / 3600;
+  const d = h / 24;
+  const y = d / 365.25;
+  return y >= 2 ? unitHtml(y, "y") : d >= 2 ? unitHtml(d, "d") : unitHtml(h, "h");
+}
+
+function orbitFact(node) {
+  const r = node.orbit?.radius;
+  if (!isQuantity(r)) return "";
+  const period = periodFact(node.orbit?.period);
+  return unitHtml(r.value, r.unit) + (period ? ` · ${period}` : "");
+}
+
+// Temperature as the reader should take it: the book's word where there is one (ad2300), a surface
+// figure where the book gives one (btech, aow), and a blackbody figure labelled as such otherwise.
+function tempFact(node) {
+  const word = node.body?.temp;
+  const k = planetTempK(node);
+  if (k === null) return word ? escapeHtml(humanize(word)) : "";
+  const kelvin = `${Math.round(k)} K (${Math.round(k - 273.15)} °C)`;
+  if (word) return `${escapeHtml(humanize(word))} · blackbody ${kelvin}`;
+  const surface = node.planet?.habitability?.temperature ?? node.world?.climate?.averageSurfaceTemperature;
+  return surface ? kelvin : `blackbody ${kelvin}`;
+}
+
+// The book's atmosphere class and, where it gives one, the pressure: ad2300 `body.atmosphere` +
+// `atmosphericPressure`, btech `planet.atmosphere`, aow `world.atmosphere.worldClass` + `pressure`.
+function atmosphereFact(node) {
+  const name = node.body?.atmosphere ?? node.planet?.atmosphere ?? node.world?.atmosphere?.worldClass;
+  const p = node.body?.atmosphericPressure ?? node.world?.atmosphere?.pressure;
+  const parts = [];
+  if (name) parts.push(escapeHtml(humanize(name)));
+  if (isQuantity(p)) parts.push(unitHtml(p.value, p.unit));
+  return parts.join(" · ");
+}
+
+function tintName(key) {
+  if (key === "gas") return "gas giant";
+  if (key === "ice") return "ice giant";
+  if (key === "ocean") return "ocean world";
+  return key === "unknown" ? "" : `${key} rock`;
+}
+
+function hoverCardHtml(node, isPrimary) {
+  const rows = [];
+  const add = (label, html) => {
+    if (html) rows.push(`<dt>${label}</dt><dd>${html}</dd>`);
+  };
+  let kind;
+  if (node.kind === "star") {
+    kind = isPrimary ? "primary star" : "companion star";
+    const rm = radiusM(node.core?.radius);
+    if (isQuantity(node.core?.mass)) add("Mass", unitHtml(node.core.mass.value, node.core.mass.unit));
+    if (rm !== null) add("Radius", unitHtml(rm / SUN_RADIUS_M, "R☉"));
+    if (isQuantity(node.core?.luminosity)) add("Luminosity", unitHtml(node.core.luminosity.value, node.core.luminosity.unit));
+    if (isQuantity(node.core?.temperature)) add("Temperature", unitHtml(node.core.temperature.value, node.core.temperature.unit));
+    if (isQuantity(node.orbit?.radius)) add("Separation", orbitFact(node));
+  } else if (node.kind === "planet") {
+    kind = ["planet", tintName(planetTint(node).key)].filter(Boolean).join(" · ");
+    const rm = radiusM(node.core?.radius);
+    if (rm !== null) add("Radius", unitHtml(rm / EARTH_RADIUS_M, "R⊕"));
+    const g = node.core?.surfaceGravity;
+    if (isQuantity(g) && g.unit === "m/s²") add("Gravity", unitHtml(g.value / G0, "g"));
+    add("Temperature", tempFact(node));
+    add("Atmosphere", atmosphereFact(node));
+    const water = waterFraction(node);
+    if (water !== null) add("Water", `${Math.round(water * 100)}% cover`);
+    add("Orbit", orbitFact(node));
+    const kids = childSummary(node);
+    if (kids.moons || kids.ring) add("Moons", `${kids.moons || "none"}${kids.ring ? ", ringed" : ""}`);
+    if (habitableFlag(node)) add("Habitable", `yes (${HABITABLE_FLAG_NAME[GENERATOR] || "the book's flag"})`);
+  } else {
+    kind = humanize(node.kind).toLowerCase();
+    add("Orbit", orbitFact(node));
+  }
+  return (
+    `<div class="hc-title"><strong>${escapeHtml(bodyLabel(node))}</strong><span class="hc-kind">${escapeHtml(kind)}</span></div>` +
+    (rows.length ? `<dl class="grid">${rows.join("")}</dl>` : "") +
+    `<div class="hc-actions"><button type="button" class="hc-open">Show in system detail ↓</button></div>`
+  );
+}
+
+function hoverCardEl() {
+  let card = els.rendered.querySelector(".hover-card");
+  if (!card) {
+    card = document.createElement("div");
+    card.className = "hover-card";
+    card.hidden = true;
+    els.rendered.appendChild(card);
+  }
+  return card;
+}
+
+// Show the card above the glyph group, centred on it and kept inside #rendered; below it when there
+// is no room above (the top row).
+function showHoverCard(target) {
+  const node = nodeIndex.get(target.dataset.id);
+  if (!node) return;
+  shownId = target.dataset.id;
+  const card = hoverCardEl();
+  card.innerHTML = hoverCardHtml(node, node === lastData?.root);
+  card.hidden = false;
+  const host = els.rendered.getBoundingClientRect();
+  const glyph = target.getBoundingClientRect();
+  const left = Math.max(0, Math.min(glyph.left + glyph.width / 2 - host.left - card.offsetWidth / 2, host.width - card.offsetWidth));
+  let top = glyph.top - host.top - card.offsetHeight - 8;
+  if (top < 0) top = glyph.bottom - host.top + 8;
+  card.style.left = `${Math.round(left)}px`;
+  card.style.top = `${Math.round(top)}px`;
+}
+
+function hideHoverCard() {
+  clearTimeout(hideTimer);
+  const card = els.rendered.querySelector(".hover-card");
+  if (card) card.hidden = true;
+}
+
+// Leaving a glyph hides the card only after a grace period, cancelled if the pointer arrives on the
+// card itself — the standard tooltip pattern, so the card's action can be reached.
+function scheduleHide() {
+  clearTimeout(hideTimer);
+  hideTimer = setTimeout(hideHoverCard, 150);
+}
+
+const nodeSelector = (cls, id) => `${cls}[data-id="${CSS.escape(String(id))}"]`;
+
+// Jump from the map to the body's record: open the fold-out, scroll the record into view and flash
+// it. Unpins the card, since the reader is leaving the map.
+function openNode(id) {
+  const record = els.rendered.querySelector(nodeSelector("li.node", id));
+  if (!record) return;
+  pinnedId = null;
+  hideHoverCard();
+  const fold = els.rendered.querySelector("details.tree-wrap");
+  if (fold) fold.open = true;
+  // Scroll the record's head, not the record: a planet's record contains its moons' records and can
+  // be screens tall, and centring that would land the reader among the moons.
+  (record.querySelector(":scope > .node-head") ?? record).scrollIntoView({ behavior: "smooth", block: "center" });
+  record.classList.remove("flash");
+  void record.offsetWidth; // restart the animation if it is still running from a previous jump
+  record.classList.add("flash");
+  record.addEventListener("animationend", () => record.classList.remove("flash"), { once: true });
+}
+
+// Light (or unlight) every glyph for a body — two for a companion star, which is drawn in its
+// primary's row and as its own row head.
+function litGlyph(id, on) {
+  for (const g of els.rendered.querySelectorAll(nodeSelector(".orrery-body", id))) g.classList.toggle("lit", on);
+}
+
+// Delegated on #rendered, which survives re-renders (the orrery is rebuilt on generate and resize).
+els.rendered.addEventListener("pointerover", (event) => {
+  const at = (sel) => event.target.closest?.(sel);
+  if (at(".hover-card")) {
+    clearTimeout(hideTimer);
+    return;
+  }
+  const glyph = at(".orrery-body");
+  if (glyph && pinnedId === null) {
+    clearTimeout(hideTimer);
+    showHoverCard(glyph);
+  }
+  const head = at(".node-head");
+  if (head) litGlyph(head.parentElement.dataset.id, true);
+});
+els.rendered.addEventListener("pointerout", (event) => {
+  const from = event.target.closest?.(".orrery-body, .hover-card");
+  if (from && pinnedId === null && !from.contains(event.relatedTarget)) scheduleHide();
+  const head = event.target.closest?.(".node-head");
+  if (head && !head.contains(event.relatedTarget)) litGlyph(head.parentElement.dataset.id, false);
+});
+// Double-click on a glyph goes straight to its record. (The two clicks pin and unpin first, so the
+// card ends hidden either way.)
+els.rendered.addEventListener("dblclick", (event) => {
+  const glyph = event.target.closest?.(".orrery-body");
+  if (glyph) openNode(glyph.dataset.id);
+});
+// Click is delegated on the document, not #rendered: a tap anywhere else on the page must unpin.
+document.addEventListener("click", (event) => {
+  if (event.target.closest?.(".hc-open")) {
+    if (shownId !== null) openNode(shownId);
+    return;
+  }
+  if (event.target.closest?.(".hover-card")) return; // clicks inside the card do not unpin it
+  const target = event.target.closest?.(".orrery-body");
+  if (!target) {
+    if (pinnedId !== null) {
+      pinnedId = null;
+      hideHoverCard();
+    }
+    return;
+  }
+  if (pinnedId === target.dataset.id) {
+    pinnedId = null;
+    hideHoverCard();
+  } else {
+    pinnedId = target.dataset.id;
+    showHoverCard(target);
+  }
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && pinnedId !== null) {
+    pinnedId = null;
+    hideHoverCard();
+  }
+});
+
 // --- wiring -----------------------------------------------------------------------------------
 
 function setStatus(message, isError) {
@@ -1019,6 +1265,8 @@ async function generate({ updateUrl = true } = {}) {
     if (GENERATOR === "traveller") showTraveller(body);
     else {
       lastData = body;
+      nodeIndex = indexNodes(body.root);
+      pinnedId = null;
       els.rendered.innerHTML = render(body);
     }
     els.result.hidden = false;

@@ -134,6 +134,86 @@ section#result {
   margin-top: 1.5rem;
 }
 
+/* Hover card: headline facts for the orrery body under the pointer (a tap pins it on touch).
+   Positioned within #rendered rather than the orrery card, whose overflow would clip it. */
+#rendered {
+  position: relative;
+}
+
+.orrery-body {
+  cursor: pointer;
+}
+
+.orrery-body:hover {
+  filter: brightness(1.15);
+}
+
+.hover-card {
+  position: absolute;
+  z-index: 5;
+  max-width: 280px;
+  padding: 0.5rem 0.7rem 0.55rem;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+  font-size: 0.8rem;
+}
+
+.hover-card .hc-actions {
+  margin-top: 0.4rem;
+}
+
+/* The card's action, styled as a link. */
+.hc-open {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--accent);
+  font: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.hc-open:hover {
+  text-decoration: underline;
+  filter: none;
+}
+
+/* A glyph whose record is being hovered in the fold-out. */
+.orrery-body.lit {
+  filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.85)) brightness(1.25);
+}
+
+/* A record just jumped to from the map. */
+@keyframes node-flash {
+  from {
+    background: rgba(110, 168, 254, 0.28);
+  }
+  to {
+    background: transparent;
+  }
+}
+
+.node.flash > .node-head {
+  animation: node-flash 1.6s ease-out;
+  border-radius: 6px;
+}
+
+.hover-card .hc-title {
+  margin-bottom: 0.3rem;
+}
+
+.hover-card .hc-kind {
+  color: var(--muted);
+  margin-left: 0.4rem;
+}
+
+.hover-card .grid {
+  font-size: 0.78rem;
+  gap: 0.05rem 0.7rem;
+}
+
 .card {
   background: var(--panel);
   border: 1px solid var(--border);
