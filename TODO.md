@@ -207,9 +207,10 @@ Small, mostly no API change. Together these turn "seven identical discs" into a 
       state of Phase 2; where AoW's depth pays off. [L]
 - [ ] **Batch roll and pick.** Roll N seeds, show thumbnails, filter by "has a habitable
       world / gas giant / belt / companion". Directly serves the GM loop. [M–L]
-- [ ] **Companion-system polish.** Each star's own habitable band; separation on the tether;
-      start the tether below the companion's label block rather than through it (it has always
-      crossed the label; the strip connector already does this). Sizing and colour are done. [S]
+- [x] **Companion tether.** The tether now leaves the companion glyph's edge and drops past its
+      label block before sweeping to the companion's row, instead of running through the label.
+      (Per-star bands happen automatically once the API gives a star a zone; separation on the
+      tether was dropped as redundant with the label and hover card.) [XS]
 - [ ] **Eccentric orbits (aow).** Offset the ellipse by `orbit.eccentricity`. [S, low value]
 - [ ] **Animated or scale-toggling orrery.** Fun, low information per unit of effort. [L, low]
 
@@ -296,9 +297,8 @@ game.
       fold-out scrolls horizontally inside itself when a deeply nested grid is wider than the
       viewport. [XS]
 - [x] `buildUrl()` now trims the API base, matching what `apiBase.js` saves. [XS]
-- [ ] Reverse jump: clicking a record's `#id` could scroll back up to its glyph and flash it;
-      today the record→glyph link is hover-only, which does nothing while the orrery is
-      off-screen. [S]
+- [x] Reverse jump: a record's `#id ↑` (only on bodies the map draws) scrolls the orrery into
+      view and pulses the glyph, both glyphs for a companion star. [S]
 - [x] Hovering a moon dot or a label opens the body's card. Kept on purpose: the larger target
       is easier to hit, especially on touch, and the legend's swatches are not interactive, so
       there is nothing to reconcile. [decision]

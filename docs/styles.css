@@ -496,6 +496,37 @@ code {
   font-size: 0.85rem;
 }
 
+/* A record id that links back up to its glyph in the map. */
+.node-id-link {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.node-id-link:hover {
+  color: var(--accent);
+  text-decoration: underline;
+  filter: none;
+}
+
+/* A glyph just jumped to from its record. */
+@keyframes glyph-pulse {
+  from {
+    filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.95)) brightness(1.6);
+  }
+  to {
+    filter: none;
+  }
+}
+
+.orrery-body.pulse {
+  animation: glyph-pulse 1.6s ease-out;
+}
+
 .node-orbit {
   color: var(--muted);
   font-size: 0.9rem;

@@ -936,12 +936,14 @@ function orreryRowSvg(row) {
   // Dashed tether from the companion's glyph in its primary's row down to its own row. An S-curve
   // rather than a straight line, since the two ends are usually far apart horizontally.
   if (row.link) {
-    const sx = row.link.x;
-    const sy = row.link.y + row.link.r + 4;
+    // The stub leaves the glyph's right edge (the side away from the sweep) and drops past the
+    // two-line label block centred under the glyph, so the curve never crosses the label.
+    const sx = row.link.x + Math.max(row.link.r, 24) + 4;
+    const sy = row.link.y + Math.max(ORRERY.labelTop, row.link.r + 22) + ORRERY.lineHeight + 8;
     const ex = row.x;
     const ey = row.y - row.r - 4;
     const mid = sy + (ey - sy) / 2;
-    parts.push(`<path d="M${n2(sx)},${n2(sy)} C${n2(sx)},${n2(mid)} ${n2(ex)},${n2(mid)} ${n2(ex)},${n2(ey)}" fill="none" stroke="currentColor" stroke-opacity="0.3" stroke-dasharray="4 4" />`);
+    parts.push(`<path d="M${n2(sx)},${n2(row.link.y)} L${n2(sx)},${n2(sy)} C${n2(sx)},${n2(mid)} ${n2(ex)},${n2(mid)} ${n2(ex)},${n2(ey)}" fill="none" stroke="currentColor" stroke-opacity="0.3" stroke-dasharray="4 4" />`);
   }
   if (row.zone) parts.push(zoneSvg(row));
   if (row.from) {
@@ -1192,7 +1194,9 @@ function portraitSvg(node) {
   return `<svg class="portrait" viewBox="0 0 ${w} 26" width="32" height="21" aria-hidden="true">${inner}</svg>`;
 }
 
-function renderNode(node) {
+// `hasGlyph` is true for bodies the orrery draws — stars and a star's direct children — whose
+// record id then doubles as a link back up to the glyph.
+function renderNode(node, hasGlyph) {
   const title = bodyLabel(node);
   const orbitRadius = node.orbit?.radius ? quantity(node.orbit.radius) : "";
 
@@ -1204,13 +1208,15 @@ function renderNode(node) {
     sections.push(section(humanize(k), renderValue(val)));
   }
 
-  const kids = (node.children || []).map(renderNode).join("");
+  const kids = (node.children || []).map((child) => renderNode(child, node.kind === "star")).join("");
   return `<li class="node" data-id="${escapeHtml(node.id)}">
     <div class="node-head">
       ${portraitSvg(node)}
       <span class="badge badge-${escapeHtml(node.kind)}">${escapeHtml(node.kind)}</span>
       <span class="node-title">${escapeHtml(title)}</span>
-      <span class="node-id">#${escapeHtml(node.id)}</span>
+      ${hasGlyph
+        ? `<button type="button" class="node-id node-id-link" title="Show in the map">#${escapeHtml(node.id)} ↑</button>`
+        : `<span class="node-id">#${escapeHtml(node.id)}</span>`}
       ${orbitRadius ? `<span class="node-orbit">${orbitRadius}</span>` : ""}
     </div>
     <div class="node-detail">${sections.join("")}</div>
@@ -1296,7 +1302,7 @@ function render(data) {
     <div class="card">
       <details class="tree-wrap">
         <summary>System detail</summary>
-        <ul class="tree">${renderNode(data.root)}</ul>
+        <ul class="tree">${renderNode(data.root, true)}</ul>
       </details>
     </div>`;
 }
@@ -1482,6 +1488,20 @@ function openNode(id) {
   record.addEventListener("animationend", () => record.classList.remove("flash"), { once: true });
 }
 
+// Jump from a record back to its glyph: scroll the map into view and pulse the glyph (both glyphs
+// for a companion star). The reverse of openNode().
+function jumpToGlyph(id) {
+  const glyphs = [...els.rendered.querySelectorAll(nodeSelector(".orrery-body", id))];
+  if (!glyphs.length) return;
+  glyphs[0].scrollIntoView({ behavior: "smooth", block: "center" });
+  for (const g of glyphs) {
+    g.classList.remove("pulse");
+    void g.getBoundingClientRect(); // restart the animation if it is still running
+    g.classList.add("pulse");
+    g.addEventListener("animationend", () => g.classList.remove("pulse"), { once: true });
+  }
+}
+
 // Light (or unlight) every glyph for a body — two for a companion star, which is drawn in its
 // primary's row and as its own row head.
 function litGlyph(id, on) {
@@ -1517,6 +1537,11 @@ els.rendered.addEventListener("dblclick", (event) => {
 });
 // Click is delegated on the document, not #rendered: a tap anywhere else on the page must unpin.
 document.addEventListener("click", (event) => {
+  const idLink = event.target.closest?.(".node-id-link");
+  if (idLink) {
+    jumpToGlyph(idLink.closest("li.node").dataset.id);
+    return;
+  }
   if (event.target.closest?.(".hc-open")) {
     if (shownId !== null) openNode(shownId);
     return;
