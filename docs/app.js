@@ -47,7 +47,7 @@ function formParams() {
 }
 
 function buildUrl() {
-  const base = els.apiBase.value.replace(/\/+$/, "");
+  const base = els.apiBase.value.trim().replace(/\/+$/, "");
   return `${base}/api/v1/${GENERATOR}?${formParams()}`;
 }
 

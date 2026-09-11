@@ -124,6 +124,7 @@ button:hover {
 
 .status {
   color: var(--muted);
+  overflow-wrap: anywhere; /* the full request URL must not force the page wider than a phone */
 }
 
 .status.error {
@@ -361,7 +362,12 @@ section#result {
   color: var(--muted);
 }
 
-/* The folded-away per-body detail under the orrery. */
+/* The folded-away per-body detail under the orrery. Deeply nested records with wide grids can
+   exceed a phone's width; they scroll inside the fold-out rather than widening the page. */
+.tree-wrap {
+  overflow-x: auto;
+}
+
 .tree-wrap > summary {
   margin-bottom: 0.5rem;
 }

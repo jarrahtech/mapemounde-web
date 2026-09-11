@@ -292,17 +292,16 @@ game.
 
 ## Small fixes noticed along the way
 
-- [ ] At phone width the page scrolls sideways: the status line's full request URL does not
-      wrap (`overflow-wrap: anywhere` on `.status`), and the fold-out's definition grids can
-      exceed 400px. Neither is the orrery's doing. [XS]
-- [ ] `buildUrl()` does not trim the API base, so a trailing space in the field breaks the
-      request even though `apiBase.js` trims it on save. [XS]
+- [x] At phone width the page scrolled sideways: the status line's URL now wraps, and the
+      fold-out scrolls horizontally inside itself when a deeply nested grid is wider than the
+      viewport. [XS]
+- [x] `buildUrl()` now trims the API base, matching what `apiBase.js` saves. [XS]
 - [ ] Reverse jump: clicking a record's `#id` could scroll back up to its glyph and flash it;
       today the record→glyph link is hover-only, which does nothing while the orrery is
       off-screen. [S]
-- [ ] Hovering a moon dot or a label opens the body's card (they sit inside the glyph's group),
-      which makes the target larger but means the legend's moon swatch and real moon dots behave
-      differently. Fine, but tidy when the legend becomes a popover. [XS]
+- [x] Hovering a moon dot or a label opens the body's card. Kept on purpose: the larger target
+      is easier to hit, especially on touch, and the legend's swatches are not interactive, so
+      there is nothing to reconcile. [decision]
 
 ## Open questions
 
