@@ -708,9 +708,11 @@ function layoutOrrery(root, available = 0) {
 // readout — formatNumber's 4dp turns an orbit into "85.2013au". The tree below still shows the
 // full-precision value.
 // Three significant figures, for headline labels rather than readouts (formatNumber's 4dp turns an
-// orbit into "85.2013au"); formatNumber still handles the non-number/non-finite contract.
+// orbit into "85.2013au"); a million and up goes exponential as formatNumber does, so a distance in
+// metres does not print twelve digits. formatNumber still handles the non-number/non-finite contract.
 function sig3(v) {
-  return typeof v === "number" && isFinite(v) ? String(Number(v.toPrecision(3))) : formatNumber(v);
+  if (typeof v !== "number" || !isFinite(v)) return formatNumber(v);
+  return Math.abs(v) >= 1e6 ? v.toExponential(2) : String(Number(v.toPrecision(3)));
 }
 
 function orbitLabel(q) {
@@ -1056,14 +1058,64 @@ function renderNode(node) {
   </li>`;
 }
 
-// The header line: always generator + seed, plus every other system-level key (for aow these are
-// age/metallicity/earthLike, for btech starType).
-function renderMeta(data) {
-  const tail = Object.entries(data)
-    .filter(([k]) => !["generator", "seed", "root"].includes(k))
-    .map(([k, v]) => ` · ${escapeHtml(humanize(k))} <strong>${renderValue(v)}</strong>`)
-    .join("");
-  return `<p class="meta">Generator <strong>${text(data.generator)}</strong> · seed <strong>${text(data.seed)}</strong>${tail}</p>`;
+// --- summary strip ----------------------------------------------------------------------------
+// What the map cannot answer at a glance, as a row of chips above it, drawn with the legend's
+// swatches: planets counted by their book's own class (tinted as the orrery tints them), habitable
+// worlds, the moon total, then the system-level figures that are not form parameters (aow's age
+// and metallicity) and the primary's own headline quantities (btech's lifetime, charge time and
+// safe-jump distance arrive this way). Stars, belts, rings and the seed are left out: the map, and
+// the form just above, already show them. Everything is generic over the payload except the
+// planet class, which is the book's caption, and the habitability flag, which is the book's boolean.
+
+// Star-level figures no GM selects on, and labels that read better than the field name (btech's
+// `lifetime` is the star's age in the strip, matching aow's `age`). Field names, not categories.
+const SUMMARY_SKIP = new Set(["initialLuminosity", "initialMass"]);
+const SUMMARY_LABELS = { lifetime: "Age" };
+
+function summaryHtml(data) {
+  const c = 15;
+  const disc = (r, fill) => `<circle cx="${c}" cy="${c}" r="${r}" fill="${fill}" />`;
+  const rock = ROCK_TINTS[2].fill;
+  const chips = [];
+  const chip = (svg, html, cls = "") => chips.push(`<li class="chip${cls ? " " + cls : ""}">${svg}<span>${html}</span></li>`);
+  const count = (n, one, many = `${one}s`) => `<strong>${n}</strong> ${n === 1 ? one : many}`;
+
+  // One walk over every star's direct children, recursing into companions.
+  const classes = new Map(); // book class → { n, tint }
+  let moons = 0, habitable = 0;
+  const visit = (star) => {
+    for (const node of star.children || []) {
+      if (node.kind === "star") {
+        visit(node);
+        continue;
+      }
+      moons += childSummary(node).moons;
+      if (node.kind === "planet") {
+        const key = bodyLabel(node);
+        const entry = classes.get(key) || { n: 0, tint: planetTint(node) };
+        entry.n += 1;
+        classes.set(key, entry);
+        if (habitableFlag(node)) habitable += 1;
+      }
+    }
+  };
+  visit(data.root);
+
+  for (const [key, { n, tint }] of [...classes].sort((a, b) => b[1].n - a[1].n)) {
+    chip(swatch(disc(7, tint.fill) + (tint.band ? giantBands(c, c, 7, tint.band) : "")), `<strong>${n}</strong> ${escapeHtml(key)}`);
+  }
+  if (habitable) chip(swatch(disc(6, rock).replace(`cy="${c}"`, `cy="${c - 3}"`) + `<circle cx="${c}" cy="${c + 9}" r="2.8" fill="${HABITABLE_INK}" />`), count(habitable, "habitable", "habitable"));
+  if (moons) chip(swatch(`<circle cx="${c}" cy="${c + 4}" r="6" fill="${rock}" />` + moonDots(c, c + 4, 6, 5)), count(moons, "moon"));
+  // System-level figures that are not echoes of the form (its [data-param] inputs), then the
+  // primary's own quantity extras (not its nested objects, which belong to the fold-out).
+  const params = new Set([...document.querySelectorAll("[data-param]")].map((el) => el.dataset.param));
+  const fact = (k, v) => chip("", `${escapeHtml(SUMMARY_LABELS[k] || humanize(k))} <strong>${isQuantity(v) ? unitHtml(v.value, v.unit) : renderValue(v)}</strong>`, "chip-fact");
+  for (const [k, v] of Object.entries(data)) if (!["generator", "seed", "root"].includes(k) && !params.has(k)) fact(k, v);
+  for (const [k, v] of Object.entries(data.root)) {
+    if (STRUCTURAL.has(k) || SUMMARY_SKIP.has(k) || !isQuantity(v)) continue;
+    fact(k, v);
+  }
+  return `<ul class="summary">${chips.join("")}</ul>`;
 }
 
 // A system tree (ad2300/btech/aow). The orrery carries the shape of the system; the full per-body
@@ -1075,14 +1127,13 @@ function availableWidth() {
   return (els.form.clientWidth || 0) - 18;
 }
 
-function orreryCardHtml(root) {
-  return renderOrrerySvg(root, availableWidth()) + legendHtml(root);
+function orreryCardHtml(data) {
+  return summaryHtml(data) + renderOrrerySvg(data.root, availableWidth()) + legendHtml(data.root);
 }
 
 function render(data) {
-  return `<div class="card orrery-card">${orreryCardHtml(data.root)}</div>
+  return `<div class="card orrery-card">${orreryCardHtml(data)}</div>
     <div class="card">
-      ${renderMeta(data)}
       <details class="tree-wrap">
         <summary>System detail</summary>
         <ul class="tree">${renderNode(data.root)}</ul>
@@ -1411,7 +1462,7 @@ window.addEventListener("resize", () => {
   clearTimeout(resizeTimer);
   resizeTimer = setTimeout(() => {
     const card = els.rendered.querySelector(".orrery-card");
-    if (card) card.innerHTML = orreryCardHtml(lastData.root);
+    if (card) card.innerHTML = orreryCardHtml(lastData);
   }, 150);
 });
 

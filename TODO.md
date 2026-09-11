@@ -129,6 +129,11 @@ Small, mostly no API change. Together these turn "seven identical discs" into a 
       graduate the mark — green as now, plus yellow and red for increasingly precarious
       habitability. (b) needs a definition per book, or the user-set criteria in Open
       questions, before anything is drawn. Think first; the drawing is small. [S to draw]
+      Worked example: aow `seed=5326632118759367&earthLike=true`, 3rd planet — 281 K, 60%
+      water, Earth-class air at 0.84 atm with O₂ ≈ 0.22 atm, yet `breathable: false` because
+      AoW's rule (AtmosphereGenAow step 31: O₂ 0.12–0.30 atm, CO₂ ≤ 0.015 atm, N₂ ≤ 4 atm)
+      fails on CO₂ ≈ 0.033 atm. Strictly correct by the book, but exactly the world a GM
+      would want flagged as "habitable with a caveat" — a candidate for a second class.
 - [ ] **Moon dots coloured by condition** (after the above settles): blue for ice, green for
       habitable, red for hostile or hot, grey when unknown. The data is there for two books:
       ad2300 moons carry the same `body` record as its planets (world type, temp, water,
@@ -153,12 +158,16 @@ Small, mostly no API change. Together these turn "seven identical discs" into a 
 - [ ] **Moon system as a mini strip.** For a planet with many moons, a compact log-radius
       strip of dots with the moon nodes folded beneath it. btech's fold-out is currently
       dominated by moon records (a 31-moon planet is ~30 screens tall). [M]
-- [ ] **Star card.** The primary drawn to scale against a Sun outline, with class, mass,
-      luminosity, temperature and lifetime/age. [S]
-- [ ] **Summary strip instead of the developer meta line.** Replace "Generator ad2300 · seed
-      42" with icon-led counts: star class chip, planets by class, moons, belts, habitable
-      worlds, companion count; btech adds jump distance / charge time, aow age and
-      metallicity. Keep seed visible but small; drop `#id` from node heads or mute it. [S]
+- ~~**Star card.** The primary drawn to scale against a Sun outline with its headline
+      figures.~~ **Dropped** (built, then removed 2026-09-11): it added nothing over hovering the
+      star in the orrery, which shows the same figures. If a Sun-scale comparison is ever wanted,
+      it belongs in the star's hover card.
+- [x] **Summary strip instead of the developer meta line.** Chips above the map, trimmed to
+      what the picture cannot answer: planets by book class with their tint, habitable count,
+      moon total, system figures that are not form parameters (aow age / metallicity) and the
+      primary's headline quantities (btech lifetime shown as age / charge time / safe jump).
+      Stars, belts, rings, form parameters, the seed and aow's initial luminosity/mass were
+      dropped as redundant or of no use to a GM. [S]
 
 ## Phase 3 — keep it
 

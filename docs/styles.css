@@ -328,13 +328,36 @@ section#result {
   margin-bottom: 0.5rem;
 }
 
-.meta {
+/* Summary strip: what the map cannot answer at a glance, as chips above it in the orrery card. */
+.summary {
+  list-style: none;
+  margin: 0.15rem 0 0.4rem;
+  padding: 0 0.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem 0.5rem;
+  font-size: 0.85rem;
   color: var(--muted);
-  margin-bottom: 1rem;
 }
 
-.meta strong {
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.15rem 0.55rem 0.15rem 0.3rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--panel-2);
+}
+
+.chip strong {
   color: var(--text);
+  font-weight: 600;
+}
+
+.chip-fact {
+  padding-left: 0.55rem;
 }
 
 .unit {
