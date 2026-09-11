@@ -292,13 +292,52 @@ section#result {
   color: var(--text);
 }
 
-/* Legend under the orrery: only the marks this system uses, in the orrery's own colours. Sits
-   inside the scrolling card but wraps to the visible width, so it never scrolls with a wide system. */
+/* Legend: an "ⓘ Legend" pill at the bottom right of the orrery card that floats the legend (only
+   the marks this system uses, in the orrery's own colours) as a panel above itself. */
+.legend-wrap {
+  position: relative;
+  display: flex;
+  justify-content: flex-end;
+  margin: 0.3rem 0.25rem 0;
+}
+
+.legend-wrap > summary {
+  list-style: none;
+  cursor: pointer;
+  font-size: 0.78rem;
+  color: var(--muted);
+  padding: 0.1rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--panel-2);
+}
+
+.legend-wrap > summary::-webkit-details-marker {
+  display: none;
+}
+
+.legend-wrap[open] > summary,
+.legend-wrap > summary:hover {
+  color: var(--text);
+}
+
+.legend-panel {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 6px);
+  z-index: 4;
+  max-width: 100%;
+  padding: 0.45rem 0.75rem 0.4rem;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+}
+
 .legend {
   list-style: none;
-  margin: 0.4rem 0 0;
-  padding: 0.45rem 0.75rem 0;
-  border-top: 1px solid var(--border);
+  margin: 0;
+  padding: 0;
   display: flex;
   flex-wrap: wrap;
   gap: 0.1rem 0.9rem;
@@ -317,8 +356,7 @@ section#result {
 }
 
 .legend-note {
-  margin: 0.2rem 0 0.15rem;
-  padding: 0 0.75rem;
+  margin: 0.3rem 0 0;
   font-size: 0.75rem;
   color: var(--muted);
 }

@@ -118,9 +118,9 @@ Small, mostly no API change. Together these turn "seven identical discs" into a 
       book's word for ad2300; surface figure for btech/aow), atmosphere, water, orbit and period,
       moons, the book's habitability flag; stars get mass, radius, luminosity, temperature and
       separation. Hover shows, tap pins (touch), tap elsewhere or Escape unpins. [M]
-- [ ] **Demote the legend to an ⓘ popover** now that the hover card explains any single body;
-      keep it one tap away for the marks a hover cannot explain (a GM scanning for green dots).
-      Open on first visit, remembered in localStorage. [S]
+- [x] **Demote the legend to an ⓘ popover** — an "ⓘ Legend" pill at the bottom right of the
+      orrery card floats the legend above itself; a native `<details>`, open on first visit,
+      remembered in localStorage and re-applied on every render. [S]
 - [ ] **Revisit habitability marking.** The books' own flags are rare: over 40 seeds ad2300
       sets `humanOxygen` on exactly its five Garden worlds, btech `habitable` on two of 331
       planets (one of 328 with LifeFriendly stars), and aow `breathable` on none of 379 by

@@ -980,9 +980,58 @@ function legendHtml(root) {
     add(swatch(disc(c, c - 3, 6, rock) + disc(c, c + 9, 2.8, HABITABLE_INK)), `${HABITABLE_FLAG_NAME[GENERATOR] || "habitable"}, the book's own flag`);
   }
 
-  return `<ul class="legend">${items.join("")}</ul>
-    <p class="legend-note">Planets are sized by log radius; orbits are spaced by rank, with the true radius printed beneath; companion stars are sized relative to the primary.</p>`;
+  return `<details class="legend-wrap"${legendOpen() ? " open" : ""}>
+      <summary>ⓘ Legend</summary>
+      <div class="legend-panel">
+        <ul class="legend">${items.join("")}</ul>
+        <p class="legend-note">Planets are sized by log radius; orbits are spaced by rank, with the true radius printed beneath; companion stars are sized relative to the primary.</p>
+      </div>
+    </details>`;
 }
+
+// The legend is a popover off an "ⓘ Legend" pill, since the hover card now explains any single body
+// and the legend is only needed for the marks a hover cannot (a GM scanning for green dots).
+// Hovering the pill shows it and leaving hides it; a click *pins* it open, and only the pinned
+// state is remembered (open on the first visit, like the API base). The orrery card is rebuilt on
+// every generate and resize, so the stored state is re-applied on each render. On touch there is no
+// hover, so a tap simply pins and unpins.
+const LEGEND_KEY = "mapemounde.legendOpen";
+
+function legendOpen() {
+  try {
+    return localStorage.getItem(LEGEND_KEY) !== "0";
+  } catch {
+    return true;
+  }
+}
+
+function saveLegendOpen(open) {
+  try {
+    localStorage.setItem(LEGEND_KEY, open ? "1" : "0");
+  } catch {
+    // Best-effort, like the API base.
+  }
+}
+
+// Delegated on the persistent #rendered. Hover opens and closes only while unpinned.
+els.rendered.addEventListener("pointerover", (event) => {
+  const wrap = event.target.closest?.("details.legend-wrap");
+  if (wrap && !legendOpen()) wrap.open = true;
+});
+els.rendered.addEventListener("pointerout", (event) => {
+  const wrap = event.target.closest?.("details.legend-wrap");
+  if (wrap && !legendOpen() && !wrap.contains(event.relatedTarget)) wrap.open = false;
+});
+// A click flips the pinned state. Pinning a panel that hover already opened must not let the
+// native toggle close it, hence the preventDefault.
+els.rendered.addEventListener("click", (event) => {
+  const summary = event.target.closest?.("details.legend-wrap > summary");
+  if (!summary) return;
+  const wrap = summary.parentElement;
+  const pin = !legendOpen();
+  saveLegendOpen(pin);
+  if (pin && wrap.open) event.preventDefault();
+});
 
 // --- tree renderer ----------------------------------------------------------------------------
 
