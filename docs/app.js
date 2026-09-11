@@ -109,9 +109,36 @@ function isQuantity(v) {
   );
 }
 
+// Context-free display scaling of a {value, unit} quantity — the conversions that depend only on
+// the unit and the magnitude, never on what kind of body the number belongs to (those, like
+// kilograms to Earth or solar masses, wait for the API to emit consistent units; see TODO.md).
+// Seconds scale to hours or days but never years, which are Earth-specific; metres and kilometres
+// scale up to au from a tenth of an au; kelvin below 1000K gets celsius alongside, so a surface
+// temperature reads at a glance while a star's stays plain. A fixed house style, no preferences.
+const AU_M = 1.495978707e11;
+
+function humaniseQuantity(q) {
+  const { value: v, unit } = q;
+  if (typeof v !== "number" || !isFinite(v)) return { value: v, unit };
+  if (unit === "s") {
+    if (Math.abs(v) >= 2 * 86400) return { value: v / 86400, unit: "d" };
+    if (Math.abs(v) >= 2 * 3600) return { value: v / 3600, unit: "h" };
+    return { value: v, unit };
+  }
+  if (unit === "m" || unit === "km") {
+    const m = unit === "km" ? v * 1e3 : v;
+    if (Math.abs(m) >= 0.1 * AU_M) return { value: m / AU_M, unit: "au" };
+    if (Math.abs(m) >= 1e3) return { value: m / 1e3, unit: "km" };
+    return { value: m, unit: "m" };
+  }
+  if (unit === "K" && v < 1000) return { value: v, unit, note: `${Math.round(v - 273.15)} °C` };
+  return { value: v, unit };
+}
+
 function quantity(q) {
   if (q == null) return DASH;
-  return `${formatNumber(q.value)}<span class="unit">${escapeHtml(q.unit)}</span>`;
+  const h = humaniseQuantity(q);
+  return `${formatNumber(h.value)}<span class="unit">${escapeHtml(h.unit)}</span>${h.note ? ` <span class="unit">(${escapeHtml(h.note)})</span>` : ""}`;
 }
 
 // camelCase / PascalCase key -> a spaced, capitalised label. "surfaceGravity" -> "Surface gravity".
@@ -1158,7 +1185,7 @@ function summaryHtml(data) {
   // System-level figures that are not echoes of the form (its [data-param] inputs), then the
   // primary's own quantity extras (not its nested objects, which belong to the fold-out).
   const params = new Set([...document.querySelectorAll("[data-param]")].map((el) => el.dataset.param));
-  const fact = (k, v) => chip("", `${escapeHtml(SUMMARY_LABELS[k] || humanize(k))} <strong>${isQuantity(v) ? unitHtml(v.value, v.unit) : renderValue(v)}</strong>`, "chip-fact");
+  const fact = (k, v) => chip("", `${escapeHtml(SUMMARY_LABELS[k] || humanize(k))} <strong>${isQuantity(v) ? qtyHtml(v) : renderValue(v)}</strong>`, "chip-fact");
   for (const [k, v] of Object.entries(data)) if (!["generator", "seed", "root"].includes(k) && !params.has(k)) fact(k, v);
   for (const [k, v] of Object.entries(data.root)) {
     if (STRUCTURAL.has(k) || SUMMARY_SKIP.has(k) || !isQuantity(v)) continue;
@@ -1220,12 +1247,15 @@ function unitHtml(value, unit) {
 }
 
 // An orbital period in hours, days or Earth years, whichever keeps the number readable.
+// A quantity at three significant figures with the house-style scaling applied.
+function qtyHtml(q) {
+  if (!isQuantity(q)) return "";
+  const h = humaniseQuantity(q);
+  return unitHtml(h.value, h.unit) + (h.note ? ` <span class="unit">(${escapeHtml(h.note)})</span>` : "");
+}
+
 function periodFact(q) {
-  if (!isQuantity(q) || q.unit !== "s") return "";
-  const h = q.value / 3600;
-  const d = h / 24;
-  const y = d / 365.25;
-  return y >= 2 ? unitHtml(y, "y") : d >= 2 ? unitHtml(d, "d") : unitHtml(h, "h");
+  return isQuantity(q) && q.unit === "s" ? qtyHtml(q) : "";
 }
 
 function orbitFact(node) {

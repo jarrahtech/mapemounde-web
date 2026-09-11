@@ -147,11 +147,19 @@ Small, mostly no API change. Together these turn "seven identical discs" into a 
 - [x] **Planet portrait in the node head.** The orrery glyph at icon size beside the badge,
       built from the orrery's own functions; stars, belts, rings and moons (grey for now) get one
       too. [XS]
-- [ ] **Humanised units in the fold-out.** Periods in days/years rather than seconds, planet
-      mass in Earth masses, radius in km, 3–4 significant figures. Client-side conversion or
-      API suggestion 4. This is text, but it makes every fold-out section usable. [S]
-- [ ] **Earth-comparison bars** beside mass, radius and gravity (Jupiter as the reference
-      above ~10 Earth masses). Depends on the unit normaliser. [M]
+- [x] **Humanised units, the context-free half.** Decided 2026-09-11: a fixed house style
+      and no unit-preference UI (if one is ever wanted, confine it to a temperature-scale
+      toggle in one formatter). Client-side, applied wherever a quantity is shown: seconds scale
+      to hours or days — never years, which are Earth-specific; metres and km scale up to au
+      from 0.1 au; kelvin below 1000 K shows celsius alongside. [S]
+- [ ] **Humanised units, the context-dependent half.** Kilograms to Earth masses for a planet
+      but solar masses for a star, densities, moon radii: these depend on the body's kind and
+      belong in the API as consistent units or Earth-relative twins (API suggestion 4), after
+      which the client's normaliser tables go. Not to be done client-side. [API]
+- [ ] **Earth-comparison bars** beside mass, radius and gravity, on planet records only, as a
+      log-scale bar with Earth and Jupiter ticks. After the API emits consistent units (above):
+      doable now with the client's normalisers, but that would deepen the duplication the API
+      change removes. [M]
 - [x] **Atmosphere composition as a stacked bar.** Detected by the shared `composition` key;
       normalised to the total (aow's values are amounts summing to `totalMass`, shown beside
       each share), one colour per gas across both books' spellings. Also on the hover card. [S]
