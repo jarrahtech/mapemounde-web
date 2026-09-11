@@ -290,9 +290,10 @@ function showTraveller(data) {
 // exceptions are small, named field chains of the bodyLabel() kind: the caption, which of a book's
 // classes are giants, and where a book keeps its temperature and water figures (see planet tints).
 //
-// Moons are counted, not drawn: a btech system carries up to ~144 of them (≈40 on one planet), so
-// individual moon glyphs would be illegible. Rings are a child of their planet, so they render as a
-// Saturn-style ellipse on the parent's glyph rather than as a row entry of their own.
+// Moons are drawn as dots on an arc over their planet, up to eight; past that the arc is full and
+// the count is written instead, since a btech planet can carry ~30 and thirty dots would be noise.
+// Rings are a child of their planet, so they render as a Saturn-style ellipse on the parent's glyph
+// rather than as a row entry of their own.
 //
 // Colours are literal hex rather than var(--…) on purpose: CSS custom properties do not survive an
 // SVG download, so the structural inks mirror the .badge-* palette in styles.css instead of reading
@@ -315,6 +316,8 @@ const ORRERY = {
 
 const MUTED_INK = "#8a94a3";
 const RING_INK = "#c2a8e0"; // rings and asteroid belts
+const MOON_INK = "#b3bcc8"; // neutral for now; moons are to be coloured by condition later (TODO.md)
+const HABITABLE_INK = "#6fcf97";
 
 // Star colour by Harvard spectral class — the leading letter of `core.stellarClass`. These are
 // schematic, not photometric: to the eye every star is close to white, so the hues are pushed well
@@ -424,6 +427,33 @@ function planetTint(node) {
   if (!band) return { fill: MUTED_INK };
   const wet = band.wet && (waterFraction(node) ?? 0) >= WET_COVERAGE;
   return { fill: wet ? band.wet : band.fill };
+}
+
+// The book's own habitability flag — ad2300 `humanOxygen`, btech `habitability.habitable`, aow
+// `atmosphere.breathable` — shown as one green dot beneath the glyph when set, and nothing when not.
+// Which flag stands for "habitable" is each book's call, not this client's (see TODO.md), so there is
+// no marginal/hostile scale and no inference from temperature or water.
+function habitableFlag(node) {
+  return (
+    (node.body?.humanOxygen ?? node.planet?.habitability?.habitable ?? node.world?.atmosphere?.breathable) === true
+  );
+}
+
+const MOON_DOTS_MAX = 8;
+
+// Moons as tiny dots on an arc over the planet — the classic satellite sketch — so a glance separates
+// a moon or two from a retinue. The arc opens with the count (22.5° per extra moon, to a 90° crown)
+// and its radius grows so the dots stay 4.5px apart; a 90° cone keeps clear of a ring's tips, which
+// sit near the horizontal.
+function moonDots(x, y, r, moons) {
+  const n = Math.min(moons, MOON_DOTS_MAX);
+  if (n === 0) return "";
+  const span = (Math.min(90, 22.5 * (n - 1)) * Math.PI) / 180;
+  const radius = Math.max(r + 7, n > 1 ? (4.5 * (n - 1)) / span : 0);
+  return Array.from({ length: n }, (_, i) => {
+    const a = -Math.PI / 2 + (n > 1 ? -span / 2 + (i * span) / (n - 1) : 0);
+    return `<circle cx="${n2(x + radius * Math.cos(a))}" cy="${n2(y + radius * Math.sin(a))}" r="1.7" fill="${MOON_INK}" />`;
+  }).join("");
 }
 
 // Three bands across a giant's disc, drawn as chords of the circle so no clipPath (and no per-glyph
@@ -641,12 +671,19 @@ function bodySvg(row, b) {
     } else {
       parts.push(disc);
     }
+    // Satellites over the glyph, the book's habitability flag under it (between glyph and label:
+    // planets never exceed 22px, so the gap below labelTop is always there).
+    if (kids?.moons) parts.push(moonDots(x, y, r, kids.moons));
+    if (node.kind === "planet" && habitableFlag(node)) {
+      parts.push(`<circle cx="${n2(x)}" cy="${n2(y + ORRERY.labelTop - 14)}" r="2.8" fill="${HABITABLE_INK}" />`);
+    }
   }
 
-  // Label block: type, then the real orbit radius, then what is in orbit around it. Kept to three
-  // lines (satellite counts share one) so every row bottoms out at the same LABEL_DEPTH. A companion
-  // drawn near the primary's size reaches below labelTop, so its label steps down to clear it, the
-  // same clearance a row head's label gets.
+  // Label block: type, then the real orbit radius, then what is in orbit around it that the glyph
+  // could not show — a moon count past the dot limit, or bodies of other kinds. Kept to three lines
+  // so every row bottoms out at the same LABEL_DEPTH. A companion drawn near the primary's size
+  // reaches below labelTop, so its label steps down to clear it, the same clearance a row head's
+  // label gets.
   let line = y + Math.max(ORRERY.labelTop, r + 22);
   parts.push(svgText(x, line, escapeHtml(bodyLabel(node)), 12, "currentColor", 600));
   if (node.orbit?.radius) {
@@ -654,7 +691,7 @@ function bodySvg(row, b) {
     parts.push(svgText(x, line, orbitLabel(node.orbit.radius), 11, "currentColor"));
   }
   const counts = [];
-  if (kids?.moons) counts.push(`${kids.moons} moon${kids.moons === 1 ? "" : "s"}`);
+  if (kids?.moons > MOON_DOTS_MAX) counts.push(`${kids.moons} moons`);
   if (kids?.other) counts.push(`${kids.other} other`);
   if (counts.length) {
     line += ORRERY.lineHeight;

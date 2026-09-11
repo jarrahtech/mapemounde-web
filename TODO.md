@@ -77,13 +77,13 @@ Small, mostly no API change. Together these turn "seven identical discs" into a 
       and yellow hothouse, with water coverage adding blue where the book supplies it (ad2300,
       aow; btech has no water field). The book's class name stays as the label, verbatim. No
       API change. [M]
-- [ ] **Habitability dot under each planet.** Show each book's *own* flag as it stands, no
+- [x] **Habitability dot under each planet.** Show each book's *own* flag as it stands, no
       interpretation: ad2300 `humanOxygen`, btech `habitability.habitable`, aow
       `atmosphere.breathable`. One dot, on or off. "Habitable" is relative, so no
       marginal/hostile scale unless a book defines one; user-set criteria are a possible later
       layer (see Open questions). [S]
-- [ ] **Moons as dots, not words.** Up to ~8 tiny dots in an arc round the planet, then
-      "+23". [S]
+- [x] **Moons as dots, not words.** Up to 8 tiny dots on an arc over the planet; past that the
+      arc is full and the count is written under the label instead. [S]
 - [ ] **Legend.** Required as soon as colour and size mean something. [XS]
 - [ ] **Fit to width.** See *Shrink vs scroll* below. Shrink with a legibility floor, then
       shed secondary label lines, then wrap. [S for plain scale-to-fit, M with the floor and
@@ -100,6 +100,21 @@ Small, mostly no API change. Together these turn "seven identical discs" into a 
       row. [M]
 - [ ] **Hover card on a glyph.** Four or five headline facts: class, radius vs Earth, gravity,
       temperature, atmosphere. HTML popover positioned off the SVG element. [M]
+- [ ] **Revisit habitability marking.** The books' own flags are rare: over 40 seeds ad2300
+      sets `humanOxygen` on exactly its five Garden worlds, btech `habitable` on two of 331
+      planets (one of 328 with LifeFriendly stars), and aow `breathable` on none of 379 by
+      default and five of 330 with the Earth-like bias. Two options to weigh: (a) check that
+      each flag is really what its book means by "habitable" and switch fields if not; (b)
+      graduate the mark — green as now, plus yellow and red for increasingly precarious
+      habitability. (b) needs a definition per book, or the user-set criteria in Open
+      questions, before anything is drawn. Think first; the drawing is small. [S to draw]
+- [ ] **Moon dots coloured by condition** (after the above settles): blue for ice, green for
+      habitable, red for hostile or hot, grey when unknown. The data is there for two books:
+      ad2300 moons carry the same `body` record as its planets (world type, temp, water,
+      humanOxygen); most aow moons carry a `world` record (climate, hydrosphere, atmosphere).
+      btech moons mostly carry only core figures (about one in ten has a `moon` record), so
+      they would stay grey or be tinted from density alone. Reuse the planet tint rules rather
+      than inventing a moon scale. [S–M]
 - [ ] **Click a glyph to open its node.** Expands the fold-out and scrolls to that body;
       hovering a tree node highlights its glyph. Node ids already exist. [S–M]
 - [ ] **Planet portrait in the node head.** The orrery glyph at ~24 px beside the badge so
