@@ -14,36 +14,9 @@
 // Seed is always sent as a string to match the API contract (Long seeds lose precision as JSON
 // numbers past 2^53).
 
-// Where the API lives. Fallback used on first visit; override it for your deployment. NB: when
-// this site is served over HTTPS (e.g. GitHub Pages) the browser blocks calls to an http:// API
-// as mixed content — the API base must be https:// there.
-const DEFAULT_API_BASE = "http://localhost:8080";
-const API_BASE_KEY = "mapemounde.apiBase";
+// The API base field is resolved, seeded and persisted by apiBase.js (loaded before this script,
+// and shared with the hub page); this script only reads it when building a request.
 const DASH = '<span class="unit">—</span>';
-
-// Resolve the API base, most-specific first: a ?api= query param wins (and is remembered), then
-// a previously saved value, then the built-in default. Shared across every page via localStorage.
-function resolveApiBase() {
-  const fromQuery = new URLSearchParams(location.search).get("api");
-  if (fromQuery) {
-    saveApiBase(fromQuery);
-    return fromQuery;
-  }
-  try {
-    return localStorage.getItem(API_BASE_KEY) || DEFAULT_API_BASE;
-  } catch {
-    // localStorage can throw in private-mode / sandboxed contexts — fall back to the default.
-    return DEFAULT_API_BASE;
-  }
-}
-
-function saveApiBase(value) {
-  try {
-    localStorage.setItem(API_BASE_KEY, value);
-  } catch {
-    // Persistence is best-effort; ignore storage failures.
-  }
-}
 
 const $ = (id) => document.getElementById(id);
 
@@ -76,11 +49,10 @@ function buildUrl() {
 
 // --- formatting helpers -----------------------------------------------------------------------
 
+const HTML_ESCAPES = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
+
 function escapeHtml(s) {
-  return String(s).replace(
-    /[&<>"']/g,
-    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c],
-  );
+  return String(s).replace(/[&<>"']/g, (c) => HTML_ESCAPES[c]);
 }
 
 function formatNumber(v) {
@@ -131,6 +103,14 @@ function bodyLabel(node) {
   );
 }
 
+// --- svg helpers ------------------------------------------------------------------------------
+
+const n2 = (v) => v.toFixed(2);
+
+function svgText(x, y, content, size, fill, weight = 400) {
+  return `<text x="${n2(x)}" y="${n2(y)}" text-anchor="middle" font-family="system-ui, sans-serif" font-size="${size}" font-weight="${weight}" fill="${fill}">${content}</text>`;
+}
+
 // --- generic value renderer -------------------------------------------------------------------
 // Renders any JSON value the API can emit: quantities via quantity(), nested objects as labelled
 // grids (recursively), arrays as lists, primitives as text. This is what makes one renderer cover
@@ -162,16 +142,8 @@ function renderGrid(entries) {
 // The Classic Traveller "system hex": one hexagon carrying the starport class (a letter), base
 // markers (★ naval at left, ▲ scout at lower-left), a gas-giant dot (upper-right), and the world
 // symbol in the centre — filled when the world has oceans, an open circle when it has none. Drawn
-// as inline SVG (self-contained colours, vector glyphs) so stage 2 can offer it as a download
-// unchanged. The UWP status line (`wdf`) is rendered below the hex by travellerCardHtml.
-
-const STARPORT_LETTER = {
-  Excellent: "A", Good: "B", Routine: "C", Poor: "D", Frontier: "E", None: "X",
-};
-
-function starportLetter(name) {
-  return STARPORT_LETTER[name] || (name ? String(name).charAt(0).toUpperCase() : "?");
-}
+// as inline SVG (self-contained colours, vector glyphs) so downloadSvg() can export it unchanged.
+// The UWP status line (`wdf`) is rendered below the hex by travellerCardHtml.
 
 // A 5-point star path centred on (cx, cy), so the marker renders without relying on a font glyph.
 function starPath(cx, cy, outer, inner) {
@@ -179,17 +151,18 @@ function starPath(cx, cy, outer, inner) {
   for (let i = 0; i < 10; i++) {
     const r = i % 2 === 0 ? outer : inner;
     const a = -Math.PI / 2 + (i * Math.PI) / 5;
-    d += `${i === 0 ? "M" : "L"}${(cx + r * Math.cos(a)).toFixed(2)},${(cy + r * Math.sin(a)).toFixed(2)}`;
+    d += `${i === 0 ? "M" : "L"}${n2(cx + r * Math.cos(a))},${n2(cy + r * Math.sin(a))}`;
   }
   return d + "Z";
 }
 
 function renderTravellerSvg(data, name) {
-  const letter = starportLetter(data.starport);
+  // The starport class is the first character of the World Data Form the API sends ("E253686-6 …").
+  const letter = String(data.wdf ?? "").charAt(0) || "?";
   const hasOceans = typeof data.water === "number" && data.water > 0;
   // World symbol: solid disc when there are oceans, hollow circle when there are none. Colours use
   // currentColor so the hex inherits the page text colour on-screen and defaults to black when the
-  // SVG is opened standalone (e.g. after a stage-2 download). Background stays transparent.
+  // SVG is opened standalone (e.g. after a download). Background stays transparent.
   // Regular hexagon centred on (130, 120); the world disc sits at that centre.
   const world = hasOceans
     ? `<circle cx="130" cy="120" r="24" fill="currentColor" />`
@@ -205,7 +178,7 @@ function renderTravellerSvg(data, name) {
 
   return `<svg class="hex-svg" viewBox="0 0 260 240" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Traveller system hex">
     <polygon points="75,25 185,25 240,120 185,215 75,215 20,120" fill="none" stroke="currentColor" stroke-width="3" />
-    <text x="130" y="74" text-anchor="middle" font-family="system-ui, sans-serif" font-size="40" font-weight="700" fill="currentColor">${escapeHtml(letter)}</text>
+    ${svgText(130, 74, escapeHtml(letter), 40, "currentColor", 700)}
     ${naval}
     ${scout}
     ${gasGiant}
@@ -252,7 +225,7 @@ function downloadSvg() {
   const xml = '<?xml version="1.0" encoding="UTF-8"?>\n' + serialized;
   const blob = new Blob([xml], { type: "image/svg+xml;charset=utf-8" });
   const url = URL.createObjectURL(blob);
-  const base = ((els.systemName && els.systemName.value) || lastTravellerData?.seed || "hex")
+  const base = (els.systemName.value || lastTravellerData?.seed || "hex")
     .trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "hex";
   const a = document.createElement("a");
   a.href = url;
@@ -264,6 +237,15 @@ function downloadSvg() {
 // Last traveller payload, so the name field can re-render the hex without re-fetching.
 let lastTravellerData = null;
 
+// Everything the traveller page does with a payload: draw the hex with the current name, keep the
+// payload for live re-drawing as the name is typed, then fit the name to the hex (which must run
+// after the SVG is in the DOM).
+function showTraveller(data) {
+  lastTravellerData = data;
+  els.rendered.innerHTML = travellerCardHtml(data, els.systemName.value);
+  fitHexName();
+}
+
 // --- system orrery ----------------------------------------------------------------------------
 // A schematic top-down view of a system: the star at the left, one concentric orbit ellipse per
 // body orbiting it, and a labelled glyph where that orbit crosses the baseline. Modelled on the
@@ -271,9 +253,9 @@ let lastTravellerData = null;
 // span 0.03au to 8au, which would collapse every inner body into the star, so orbits are spaced
 // evenly by rank and the true radius is printed under each glyph instead.
 //
-// Stage 1 glyphs are placeholders keyed only on `kind`, which every generator shares, so the orrery
-// needs no per-generator code — the same principle the tree renderer follows. bodyLabel() is the
-// seam for making the glyphs representative of the data later.
+// Glyphs are keyed only on `kind`, which every generator shares, so the orrery needs no
+// per-generator code — the same principle the tree renderer follows; bodyLabel() supplies the one
+// per-generator caption.
 //
 // Moons are counted, not drawn: a btech system carries up to ~144 of them (≈40 on one planet), so
 // individual moon glyphs would be illegible. Rings are a child of their planet, so they render as a
@@ -338,7 +320,6 @@ const GLYPH = {
 const GLYPH_DEFAULT = { r: 10, fill: MUTED_INK };
 
 const glyphOf = (kind) => GLYPH[kind] || GLYPH_DEFAULT;
-const n2 = (v) => v.toFixed(2);
 
 // What a body's children contribute to its glyph, in one pass: moons and moonlets become a count,
 // a ring becomes the Saturn ellipse, and every other kind is counted as "other" rather than dropped.
@@ -392,17 +373,13 @@ function layoutOrrery(root) {
     for (const b of bodies) {
       if (b.node.kind === "star" && (b.node.children || []).length) {
         // Carry the radius the layout chose, so the tether stays attached if the glyph is resized.
-        walk(b.node, depth + 1, { x: originX + b.rx, y: originY, r: glyphOf("star").r });
+        walk(b.node, depth + 1, { x: originX + b.rx, y: originY, r: GLYPH.star.r });
       }
     }
   };
 
   walk(root, 0, null);
   return rows;
-}
-
-function svgText(x, y, content, size, fill, weight = 400) {
-  return `<text x="${n2(x)}" y="${n2(y)}" text-anchor="middle" font-family="system-ui, sans-serif" font-size="${size}" font-weight="${weight}" fill="${fill}">${content}</text>`;
 }
 
 // The SVG twin of quantity(): a <tspan> for the unit, since an HTML <span> would not render inside
@@ -599,39 +576,27 @@ function renderNode(node) {
   </li>`;
 }
 
-// The header line: always generator + seed, plus any system-level params (passed in as extras —
-// for aow these are age/metallicity/earthLike, for btech starType). The flat record passes no
-// extras since the grid below already lists every field.
-function renderMeta(data, extras) {
-  const tail = extras
+// The header line: always generator + seed, plus every other system-level key (for aow these are
+// age/metallicity/earthLike, for btech starType).
+function renderMeta(data) {
+  const tail = Object.entries(data)
+    .filter(([k]) => !["generator", "seed", "root"].includes(k))
     .map(([k, v]) => ` · ${escapeHtml(humanize(k))} <strong>${renderValue(v)}</strong>`)
     .join("");
   return `<p class="meta">Generator <strong>${text(data.generator)}</strong> · seed <strong>${text(data.seed)}</strong>${tail}</p>`;
 }
 
+// A system tree (ad2300/btech/aow). The orrery carries the shape of the system; the full per-body
+// detail folds away below it, since a btech tree runs to ~150 nodes.
 function render(data) {
-  if (data.root) {
-    const extras = Object.entries(data).filter(([k]) => !["generator", "seed", "root"].includes(k));
-    // The orrery carries the shape of the system; the full per-body detail folds away below it,
-    // since a btech tree runs to ~150 nodes.
-    return `<div class="card orrery-card">${renderOrrerySvg(data.root)}</div>
-      <div class="card">
-        ${renderMeta(data, extras)}
-        <details class="tree-wrap">
-          <summary>System detail</summary>
-          <ul class="tree">${renderNode(data.root)}</ul>
-        </details>
-      </div>`;
-  }
-  // Traveller is a flat UWP record; show it as the Classic Traveller system hex, with the UWP
-  // status line (`wdf`) rendered below the hex.
-  if (data.generator === "traveller") {
-    lastTravellerData = data;
-    return travellerCardHtml(data, els.systemName ? els.systemName.value : "");
-  }
-  // Any other flat record: render every field but the generator/seed shown in the meta line.
-  const record = Object.entries(data).filter(([k]) => !["generator", "seed"].includes(k));
-  return `<div class="card">${renderMeta(data, [])}${renderGrid(record)}</div>`;
+  return `<div class="card orrery-card">${renderOrrerySvg(data.root)}</div>
+    <div class="card">
+      ${renderMeta(data)}
+      <details class="tree-wrap">
+        <summary>System detail</summary>
+        <ul class="tree">${renderNode(data.root)}</ul>
+      </details>
+    </div>`;
 }
 
 // --- wiring -----------------------------------------------------------------------------------
@@ -659,8 +624,9 @@ async function generate(event) {
       return;
     }
 
-    els.rendered.innerHTML = render(body);
-    if (GENERATOR === "traveller") fitHexName();
+    // Traveller is a flat UWP record shown as the system hex; every other generator is a tree.
+    if (GENERATOR === "traveller") showTraveller(body);
+    else els.rendered.innerHTML = render(body);
     els.result.hidden = false;
     setStatus(`OK (${url})`, false);
   } catch (err) {
@@ -673,20 +639,13 @@ els.randomSeed.addEventListener("click", () => {
   // A big seed to show string seeds survive the round trip (past 2^53).
   els.seed.value = String(Math.floor(Math.random() * 9e15));
 });
-// Remember the API base across visits (and across pages) whenever the user edits it.
-els.apiBase.addEventListener("change", () => saveApiBase(els.apiBase.value.trim()));
 els.form.addEventListener("submit", generate);
 
 // Traveller-only: the name is a display label, so re-render the hex live as it's typed (no refetch),
 // and let the button export the current hex as an SVG. Both controls exist only on the traveller page.
 if (els.systemName) {
   els.systemName.addEventListener("input", () => {
-    if (!lastTravellerData) return;
-    els.rendered.innerHTML = travellerCardHtml(lastTravellerData, els.systemName.value);
-    fitHexName();
+    if (lastTravellerData) showTraveller(lastTravellerData);
   });
 }
 if (els.downloadSvg) els.downloadSvg.addEventListener("click", downloadSvg);
-
-// Seed the API-base field from the saved/override/default base.
-els.apiBase.value = resolveApiBase();

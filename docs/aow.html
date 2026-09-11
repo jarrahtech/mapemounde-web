@@ -17,7 +17,7 @@
       <form id="form">
         <div class="row">
           <label for="apiBase">API base</label>
-          <!-- Value is set by app.js (saved override → ?api= → default); remembered across visits and pages. -->
+          <!-- Value is set by apiBase.js (?api= → saved → default); remembered across visits and pages. -->
           <input id="apiBase" type="text" placeholder="http://localhost:8080" spellcheck="false" />
         </div>
 
@@ -33,20 +33,21 @@
         </div>
 
         <div class="row actions">
-          <button type="submit" id="generate">Generate</button>
+          <button type="submit">Generate</button>
           <span id="status" class="status"></span>
         </div>
       </form>
 
       <section id="result" hidden>
         <div id="rendered"></div>
-        <details id="rawWrap">
+        <details>
           <summary>Raw JSON</summary>
           <pre id="raw"></pre>
         </details>
       </section>
     </main>
 
+    <script src="apiBase.js"></script>
     <script src="app.js"></script>
   </body>
 </html>

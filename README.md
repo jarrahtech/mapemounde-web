@@ -16,7 +16,7 @@ cd docs && python3 -m http.server 5173   # then open http://localhost:5173
 The **API base** field tells the page where `mapemounde-api` is running. It is
 remembered across visits (`localStorage`) and can be overridden per-load with a
 `?api=` query param; the built-in default is `http://localhost:8080`
-(see `DEFAULT_API_BASE` in `docs/app.js`).
+(see `DEFAULT_API_BASE` in `docs/apiBase.js`).
 
 ## Hosting on GitHub Pages
 

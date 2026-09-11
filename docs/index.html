@@ -13,10 +13,10 @@
     </header>
 
     <main>
-      <form id="hubForm">
+      <form>
         <div class="row">
           <label for="apiBase">API base</label>
-          <!-- Set/remembered here and shared with every generator page via localStorage. -->
+          <!-- Value is set by apiBase.js (?api= → saved → default); remembered across visits and pages. -->
           <input id="apiBase" type="text" placeholder="http://localhost:8080" spellcheck="false" />
         </div>
         <p class="hint">
@@ -45,26 +45,6 @@
       </nav>
     </main>
 
-    <script>
-      "use strict";
-      // The hub only manages the shared API base; each generator page resolves it the same way.
-      const API_BASE_KEY = "mapemounde.apiBase";
-      const DEFAULT_API_BASE = "http://localhost:8080";
-      const input = document.getElementById("apiBase");
-
-      function read() {
-        const fromQuery = new URLSearchParams(location.search).get("api");
-        if (fromQuery) {
-          try { localStorage.setItem(API_BASE_KEY, fromQuery); } catch {}
-          return fromQuery;
-        }
-        try { return localStorage.getItem(API_BASE_KEY) || DEFAULT_API_BASE; } catch { return DEFAULT_API_BASE; }
-      }
-
-      input.value = read();
-      input.addEventListener("change", () => {
-        try { localStorage.setItem(API_BASE_KEY, input.value.trim()); } catch {}
-      });
-    </script>
+    <script src="apiBase.js"></script>
   </body>
 </html>
