@@ -62,8 +62,8 @@ Small, mostly no API change. Together these turn "seven identical discs" into a 
       outside a field does the same. [S]
 - [x] **Seed and params in the URL.** `?seed=…&starType=…` so a system is a permalink, the
       back button works, and a page with a seed auto-generates on load. [S]
-- [ ] **Planet glyphs sized on a planet log scale.** Radius from `core.radius` normalised to
-      Earth radii; roughly 5 px for a dwarf up to ~22 px for a gas giant, clamped. [S–M]
+- [x] **Planet glyphs sized on a planet log scale.** Radius from `core.radius` normalised to
+      Earth radii; 5 px floor for a dwarf up to a 22 px cap that Jupiter lands on. [S–M]
 - [ ] **Star glyphs sized on a star log scale relative to the primary.** Primary stays the
       row-head size; a companion's radius is scaled by log(R_companion / R_primary), clamped
       so a brown dwarf is visibly smaller but never planet-sized. Needs star radius normalised
@@ -150,9 +150,10 @@ Small, mostly no API change. Together these turn "seven identical discs" into a 
 
 ### Sizing: two log scales
 
-- **Planets and moons:** `r_px = clamp(base + k · log10(R / R⊕), 4, 22)`. Earth ≈ 10 px,
-  Jupiter (≈11 R⊕) ≈ 22 px, a 0.3 R⊕ dwarf ≈ 5 px. Moons use the same scale with the 4 px
-  floor, so they read as dots.
+- **Planets and moons:** `r_px = clamp(10 + k · log10(R / R⊕), 5, 22)` with `k` chosen so
+  Jupiter (11.2 R⊕) lands on the cap (`planetRadiusPx()` in `app.js`). Earth = 10 px, a
+  0.3 R⊕ dwarf hits the 5 px floor. Moons should reuse the same scale with a 4 px floor, so
+  they read as dots.
 - **Stars:** the primary keeps its fixed row-head radius. A companion is drawn at
   `r_primary · clamp(1 + k · log10(R_c / R_p), 0.3, 1)`. A T dwarf is Jupiter-sized in
   reality, but it stays on the star scale on purpose: it is a star in the tree, it heads a

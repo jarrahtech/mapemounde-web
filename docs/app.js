@@ -285,9 +285,9 @@ function showTraveller(data) {
 // span 0.03au to 8au, which would collapse every inner body into the star, so orbits are spaced
 // evenly by rank and the true radius is printed under each glyph instead.
 //
-// Glyphs are keyed only on `kind`, which every generator shares, so the orrery needs no
-// per-generator code — the same principle the tree renderer follows; bodyLabel() supplies the one
-// per-generator caption.
+// Glyph shape is keyed only on `kind`, and planet size only on the shared `core.radius`, so the
+// orrery needs no per-generator code — the same principle the tree renderer follows; bodyLabel()
+// supplies the one per-generator caption.
 //
 // Moons are counted, not drawn: a btech system carries up to ~144 of them (≈40 on one planet), so
 // individual moon glyphs would be illegible. Rings are a child of their planet, so they render as a
@@ -347,11 +347,37 @@ function starTint(node) {
 // falls through to the neutral default rather than going missing.
 const GLYPH = {
   star: { r: 26 }, // painted with the gradient, so no fill of its own
-  planet: { r: 16, fill: "#6ea8fe" },
+  planet: { fill: "#6ea8fe" }, // radius comes from planetRadiusPx()
 };
 const GLYPH_DEFAULT = { r: 10, fill: MUTED_INK };
 
 const glyphOf = (kind) => GLYPH[kind] || GLYPH_DEFAULT;
+
+// A body's radius in Earth radii, whatever unit its generator used: ad2300 and btech send km, aow
+// sends m. Unknown units give null rather than a guess. (Earth-relative values from the API would
+// retire this table — see TODO.md, API suggestion 4.)
+const EARTH_RADIUS_M = 6.371e6;
+const RADIUS_UNIT_M = { m: 1, km: 1e3, "R🜨": EARTH_RADIUS_M, "R⊕": EARTH_RADIUS_M };
+
+function earthRadii(q) {
+  const scale = q && RADIUS_UNIT_M[q.unit];
+  return scale && typeof q.value === "number" && isFinite(q.value) ? (q.value * scale) / EARTH_RADIUS_M : null;
+}
+
+// Planet disc radius on a log scale of the body's real radius. Log rather than linear because
+// planet radii span two orders of magnitude (a 350km dwarf to a super-jovian), and a linear scale
+// would draw every terrestrial as a pixel beside a gas giant. Anchored so Earth is 10px and Jupiter
+// (~11.2 R🜨) lands exactly on the 22px cap; the 5px floor keeps a dwarf a visible, clickable dot.
+// A radius the client can't read draws Earth-sized rather than vanishing.
+const PLANET_PX = { earth: 10, min: 5, max: 22 };
+PLANET_PX.perDecade = (PLANET_PX.max - PLANET_PX.earth) / Math.log10(11.2);
+
+function planetRadiusPx(node) {
+  const re = earthRadii(node.core?.radius);
+  if (re === null) return PLANET_PX.earth;
+  const px = PLANET_PX.earth + PLANET_PX.perDecade * Math.log10(re);
+  return Math.min(PLANET_PX.max, Math.max(PLANET_PX.min, px));
+}
 
 // What a body's children contribute to its glyph, in one pass: moons and moonlets become a count,
 // a ring becomes the Saturn ellipse, and every other kind is counted as "other" rather than dropped.
@@ -482,14 +508,17 @@ function bodySvg(row, b) {
     // A companion star gets the same treatment as a row head, just smaller.
     parts.push(starGlyph(x, y, g.r, starTint(node)));
   } else {
-    const disc = `<circle cx="${n2(x)}" cy="${n2(y)}" r="${g.r}" fill="${g.fill}" />`;
+    const r = node.kind === "planet" ? planetRadiusPx(node) : g.r;
+    const disc = `<circle cx="${n2(x)}" cy="${n2(y)}" r="${n2(r)}" fill="${g.fill}" />`;
     if (kids?.ring) {
       // Saturn-style: the ring's far side passes behind the planet and its near side in front, so
       // the ellipse is split at its widest points and the disc drawn between the two halves. A
       // single ellipse would sit wholly on top and read as a hoop in front of the planet.
       // sweep=1 is the top (far) half, sweep=0 the bottom (near) half; both share the same tilt.
-      const rx = g.r * 2;
-      const ry = g.r * 0.55;
+      // The ring scales with the disc but has a floor, so a ringed dwarf still reads as ringed
+      // rather than as a dot with a line through it.
+      const rx = Math.max(2 * r, 14);
+      const ry = rx * 0.275;
       const half = (sweep) =>
         `<path d="M${n2(x - rx)},${n2(y)} A${n2(rx)},${n2(ry)} 0 0 ${sweep} ${n2(x + rx)},${n2(y)}" fill="none" stroke="${RING_INK}" stroke-width="2.5" transform="rotate(-18 ${n2(x)} ${n2(y)})" />`;
       parts.push(half(1), disc, half(0));
