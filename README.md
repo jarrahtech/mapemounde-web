@@ -18,6 +18,12 @@ remembered across visits (`localStorage`) and can be overridden per-load with a
 `?api=` query param; the built-in default is `http://localhost:8080`
 (see `DEFAULT_API_BASE` in `docs/apiBase.js`).
 
+**Generate** renders the system for the seed in the form; **🎲 Random** (or the `R` key
+when no field has focus) rolls a new seed and generates in one click. Every system you
+generate is mirrored into the page URL (`?seed=…` plus the generator's own params), so
+the address bar is a permalink, Back/Forward step through earlier systems, and opening a
+page with a seed in the URL generates it straight away.
+
 ## Hosting on GitHub Pages
 
 The folder is named `docs/` so Pages can serve it directly: repo **Settings → Pages

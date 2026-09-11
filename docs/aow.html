@@ -24,7 +24,6 @@
         <div class="row">
           <label for="seed">Seed</label>
           <input id="seed" type="text" value="42" spellcheck="false" />
-          <button type="button" id="randomSeed" class="ghost" title="Random seed">🎲</button>
         </div>
 
         <div class="row">
@@ -33,7 +32,8 @@
         </div>
 
         <div class="row actions">
-          <button type="submit">Generate</button>
+          <button type="submit" title="Generate the system for this seed">Generate</button>
+          <button type="button" id="random" class="ghost" title="Roll a random seed and generate (shortcut: R)">🎲 Random</button>
           <span id="status" class="status"></span>
         </div>
       </form>

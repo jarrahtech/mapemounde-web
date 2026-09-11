@@ -24,7 +24,7 @@ const els = {
   form: $("form"),
   apiBase: $("apiBase"),
   seed: $("seed"),
-  randomSeed: $("randomSeed"),
+  random: $("random"),
   status: $("status"),
   result: $("result"),
   rendered: $("rendered"),
@@ -35,16 +35,48 @@ const els = {
 
 const GENERATOR = document.body.dataset.generator;
 
-// Build the request URL for the current form state. Per-generator params are any inputs marked
-// with data-param="<name>" on the page (a checkbox contributes its checked-ness as true/false).
-function buildUrl() {
-  const base = els.apiBase.value.replace(/\/+$/, "");
+// The seed plus every per-generator param, as the form currently has them. Per-generator params
+// are any inputs marked data-param="<name>" on the page (a checkbox contributes true/false). The
+// same set is both the query string sent to the API and the page's own permalink.
+function formParams() {
   const params = new URLSearchParams({ seed: els.seed.value.trim() });
   document.querySelectorAll("[data-param]").forEach((el) => {
-    const name = el.dataset.param;
-    params.set(name, el.type === "checkbox" ? String(el.checked) : el.value);
+    params.set(el.dataset.param, el.type === "checkbox" ? String(el.checked) : el.value);
   });
-  return `${base}/api/v1/${GENERATOR}?${params.toString()}`;
+  return params;
+}
+
+function buildUrl() {
+  const base = els.apiBase.value.replace(/\/+$/, "");
+  return `${base}/api/v1/${GENERATOR}?${formParams()}`;
+}
+
+// Fill the form from the page URL. Returns true when the URL names a system (carries a seed);
+// params the URL leaves out keep whatever the form already has.
+function readUrlParams() {
+  const q = new URLSearchParams(location.search);
+  if (!q.has("seed")) return false;
+  els.seed.value = q.get("seed");
+  document.querySelectorAll("[data-param]").forEach((el) => {
+    const v = q.get(el.dataset.param);
+    if (v === null) return;
+    if (el.type === "checkbox") el.checked = v === "true";
+    else el.value = v;
+  });
+  return true;
+}
+
+// Mirror the system just generated into the page URL, so it is a permalink and Back/Forward step
+// through earlier systems. The first system *replaces* the seedless entry rather than stacking on
+// it, so Back never lands on an empty page. A ?api= the visitor arrived with is carried along, so a
+// shared link keeps pointing at the same server; nothing else from the old query survives.
+function pushUrlParams() {
+  const current = new URLSearchParams(location.search);
+  const next = formParams();
+  if (current.has("api")) next.set("api", current.get("api"));
+  const search = `?${next}`;
+  if (search === location.search) return;
+  history[current.has("seed") ? "pushState" : "replaceState"](null, "", search);
 }
 
 // --- formatting helpers -----------------------------------------------------------------------
@@ -606,8 +638,14 @@ function setStatus(message, isError) {
   els.status.classList.toggle("error", Boolean(isError));
 }
 
-async function generate(event) {
-  event.preventDefault();
+// Rapid rolling can leave several fetches in flight; only the latest one may touch the page,
+// otherwise a slow older response would overwrite a newer system while the form and URL name it.
+let requestId = 0;
+
+// Fetch and render the system the form describes. `updateUrl` is false when the URL already names
+// it (a page opened with ?seed=, or Back/Forward restoring one).
+async function generate({ updateUrl = true } = {}) {
+  const id = ++requestId;
   const url = buildUrl();
   setStatus("Generating…", false);
   els.result.hidden = true;
@@ -615,6 +653,7 @@ async function generate(event) {
   try {
     const response = await fetch(url, { headers: { Accept: "application/json" } });
     const body = await response.json();
+    if (id !== requestId) return;
     els.raw.textContent = JSON.stringify(body, null, 2);
 
     if (!response.ok) {
@@ -629,17 +668,40 @@ async function generate(event) {
     else els.rendered.innerHTML = render(body);
     els.result.hidden = false;
     setStatus(`OK (${url})`, false);
+    if (updateUrl) pushUrlParams();
   } catch (err) {
+    if (id !== requestId) return;
     // A network/CORS failure lands here (fetch rejects without a response).
     setStatus(`Request failed: ${err.message}. Is the API running at ${els.apiBase.value}?`, true);
   }
 }
 
-els.randomSeed.addEventListener("click", () => {
-  // A big seed to show string seeds survive the round trip (past 2^53).
+// One click: roll a fresh seed and generate. A big seed, to show string seeds survive the round
+// trip (past 2^53).
+function randomSystem() {
   els.seed.value = String(Math.floor(Math.random() * 9e15));
+  generate();
+}
+
+els.form.addEventListener("submit", (event) => {
+  event.preventDefault();
+  generate();
 });
-els.form.addEventListener("submit", generate);
+els.random.addEventListener("click", randomSystem);
+
+// R rolls a new system when focus is not in a field (typing an "r" into the seed or name must
+// still work, and letters change the selection inside a <select>). Modified R is left to the browser.
+document.addEventListener("keydown", (event) => {
+  if (event.key.toLowerCase() !== "r" || event.ctrlKey || event.metaKey || event.altKey) return;
+  if (event.target instanceof Element && event.target.matches("input, select, textarea")) return;
+  event.preventDefault();
+  randomSystem();
+});
+
+// Back/Forward: the URL names the system to show, so re-fetch it (generation is deterministic).
+window.addEventListener("popstate", () => {
+  if (readUrlParams()) generate({ updateUrl: false });
+});
 
 // Traveller-only: the name is a display label, so re-render the hex live as it's typed (no refetch),
 // and let the button export the current hex as an SVG. Both controls exist only on the traveller page.
@@ -649,3 +711,6 @@ if (els.systemName) {
   });
 }
 if (els.downloadSvg) els.downloadSvg.addEventListener("click", downloadSvg);
+
+// A page opened with ?seed= (a permalink) generates straight away.
+if (readUrlParams()) generate({ updateUrl: false });
