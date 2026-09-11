@@ -404,6 +404,12 @@ code {
   flex-wrap: wrap;
 }
 
+/* The record's portrait: the orrery glyph at icon size, beside the badge. */
+.portrait {
+  flex: none;
+  align-self: center;
+}
+
 .node-title {
   font-weight: 600;
 }

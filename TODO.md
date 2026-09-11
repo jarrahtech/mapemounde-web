@@ -138,8 +138,9 @@ Small, mostly no API change. Together these turn "seven identical discs" into a 
 - [x] **Click a glyph to open its node.** The hover card's "Show in system detail" action (or
       a double-click on the glyph) opens the fold-out, scrolls the record into view and flashes
       it; hovering a record lights its glyph in the map. [S–M]
-- [ ] **Planet portrait in the node head.** The orrery glyph at ~24 px beside the badge so
-      tree and orrery share an identity. [XS once glyphs exist]
+- [x] **Planet portrait in the node head.** The orrery glyph at icon size beside the badge,
+      built from the orrery's own functions; stars, belts, rings and moons (grey for now) get one
+      too. [XS]
 - [ ] **Humanised units in the fold-out.** Periods in days/years rather than seconds, planet
       mass in Earth masses, radius in km, 3–4 significant figures. Client-side conversion or
       API suggestion 4. This is text, but it makes every fold-out section usable. [S]

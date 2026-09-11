@@ -931,6 +931,41 @@ function nonEmpty(obj) {
   return obj && typeof obj === "object" && Object.keys(obj).length > 0;
 }
 
+// The record's portrait: the body as the orrery draws it, at icon size, so a record and its glyph
+// share an identity. Built from the orrery's own functions. Size is only hinted (a giant's disc is
+// larger than a dwarf's) since an icon cannot carry the log scale; moons are a grey dot until the
+// moon-colour item lands; a ring record shows the ring alone.
+function portraitSvg(node) {
+  const w = 40; // wide enough for a ringed giant's ring tips
+  const cx = 20;
+  const cy = 13;
+  let inner;
+  if (node.kind === "star") {
+    const ids = `portrait${node.id}`;
+    inner = `<defs>${starTintDefs([starTint(node)], ids)}</defs>${starGlyph(cx, cy, 8, starTint(node), ids)}`;
+  } else if (node.kind === "planet") {
+    const r = 5 + (4 * (planetRadiusPx(node) - PLANET_PX.min)) / (PLANET_PX.max - PLANET_PX.min);
+    const tint = planetTint(node);
+    const disc = `<circle cx="${cx}" cy="${cy}" r="${n2(r)}" fill="${tint.fill}" />` + (tint.band ? giantBands(cx, cy, r, tint.band) : "");
+    if (childSummary(node).ring) {
+      const ring = ringPaths(cx, cy, r);
+      inner = ring.far + disc + ring.near;
+    } else {
+      inner = disc;
+    }
+  } else if (node.kind === "asteroidBelt") {
+    inner = beltGlyph({ x: cx - 10, y: cy }, { rx: 10, ry: 30 });
+  } else if (node.kind === "moon" || node.kind === "moonlet") {
+    inner = `<circle cx="${cx}" cy="${cy}" r="3" fill="${MOON_INK}" />`;
+  } else if (node.kind === "ring") {
+    const ring = ringPaths(cx, cy, 4);
+    inner = ring.far + ring.near;
+  } else {
+    inner = `<circle cx="${cx}" cy="${cy}" r="${GLYPH_DEFAULT.r * 0.6}" fill="${GLYPH_DEFAULT.fill}" />`;
+  }
+  return `<svg class="portrait" viewBox="0 0 ${w} 26" width="32" height="21" aria-hidden="true">${inner}</svg>`;
+}
+
 function renderNode(node) {
   const title = bodyLabel(node);
   const orbitRadius = node.orbit?.radius ? quantity(node.orbit.radius) : "";
@@ -946,6 +981,7 @@ function renderNode(node) {
   const kids = (node.children || []).map(renderNode).join("");
   return `<li class="node" data-id="${escapeHtml(node.id)}">
     <div class="node-head">
+      ${portraitSvg(node)}
       <span class="badge badge-${escapeHtml(node.kind)}">${escapeHtml(node.kind)}</span>
       <span class="node-title">${escapeHtml(title)}</span>
       <span class="node-id">#${escapeHtml(node.id)}</span>
