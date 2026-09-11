@@ -1,7 +1,8 @@
 # TODO — making the system pages readable at a glance
 
 Design backlog for the three tree pages (`ad2300`, `btech`, `aow`). The traveller page has its
-own hex and is out of scope here. Nothing below is started; effort tags are estimates:
+own hex and is out of scope here. Ticked items are done (Phase 1 complete, Phase 2 under way as
+of 2026-09-11); effort tags are estimates:
 **[S]** an hour or two inside one function · **[M]** a new SVG component or layout change, about
 half a day · **[L]** a new interaction model or work that spans this repo and `mapemounde-api`.
 
@@ -186,8 +187,9 @@ Small, mostly no API change. Together these turn "seven identical discs" into a 
       state of Phase 2; where AoW's depth pays off. [L]
 - [ ] **Batch roll and pick.** Roll N seeds, show thumbnails, filter by "has a habitable
       world / gas giant / belt / companion". Directly serves the GM loop. [M–L]
-- [ ] **Companion-system polish.** Companion glyph and row head coloured and sized by the star
-      rules above; each star's own habitable band; separation on the tether. [S each]
+- [ ] **Companion-system polish.** Each star's own habitable band; separation on the tether;
+      start the tether below the companion's label block rather than through it (it has always
+      crossed the label; the strip connector already does this). Sizing and colour are done. [S]
 - [ ] **Eccentric orbits (aow).** Offset the ellipse by `orbit.eccentricity`. [S, low value]
 - [ ] **Animated or scale-toggling orrery.** Fun, low information per unit of effort. [L, low]
 
@@ -267,6 +269,20 @@ game.
 6. **`summary` on every system:** counts of planets by book class, moons, belts, stars. Cheap
    server-side; saves the client a tree walk for the summary strip and thumbnails.
 7. **`frostLine` on every star, in au,** if a book defines it, for the distance strip.
+
+## Small fixes noticed along the way
+
+- [ ] At phone width the page scrolls sideways: the status line's full request URL does not
+      wrap (`overflow-wrap: anywhere` on `.status`), and the fold-out's definition grids can
+      exceed 400px. Neither is the orrery's doing. [XS]
+- [ ] `buildUrl()` does not trim the API base, so a trailing space in the field breaks the
+      request even though `apiBase.js` trims it on save. [XS]
+- [ ] Reverse jump: clicking a record's `#id` could scroll back up to its glyph and flash it;
+      today the record→glyph link is hover-only, which does nothing while the orrery is
+      off-screen. [S]
+- [ ] Hovering a moon dot or a label opens the body's card (they sit inside the glyph's group),
+      which makes the target larger but means the legend's moon swatch and real moon dots behave
+      differently. Fine, but tidy when the legend becomes a popover. [XS]
 
 ## Open questions
 
