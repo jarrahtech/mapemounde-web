@@ -285,16 +285,18 @@ function showTraveller(data) {
 // span 0.03au to 8au, which would collapse every inner body into the star, so orbits are spaced
 // evenly by rank and the true radius is printed under each glyph instead.
 //
-// Glyph shape is keyed only on `kind`, and planet size only on the shared `core.radius`, so the
-// orrery needs no per-generator code — the same principle the tree renderer follows; bodyLabel()
-// supplies the one per-generator caption.
+// Glyph shape is keyed only on `kind` and planet size only on the shared `core.radius`, so the
+// orrery needs almost no per-generator code — the same principle the tree renderer follows. The
+// exceptions are small, named field chains of the bodyLabel() kind: the caption, which of a book's
+// classes are giants, and where a book keeps its temperature and water figures (see planet tints).
 //
 // Moons are counted, not drawn: a btech system carries up to ~144 of them (≈40 on one planet), so
 // individual moon glyphs would be illegible. Rings are a child of their planet, so they render as a
 // Saturn-style ellipse on the parent's glyph rather than as a row entry of their own.
 //
 // Colours are literal hex rather than var(--…) on purpose: CSS custom properties do not survive an
-// SVG download, so the glyph fills mirror the .badge-* palette in styles.css instead of reading it.
+// SVG download, so the structural inks mirror the .badge-* palette in styles.css instead of reading
+// it, and the planet tints are a palette of their own below.
 // Structural ink (orbit lines, labels) uses currentColor, so it stays theme-aware on screen and can
 // be baked to a solid colour the way downloadSvg() already does for the hex. NB no orrery download
 // is wired up yet — this only keeps that option open; recolouring a badge means editing both files.
@@ -346,8 +348,96 @@ function starTint(node) {
 // sized by starRadiusPx). Moons, moonlets and rings are always nested under a planet, and a belt
 // draws its own dots — so anything else the API puts in orbit falls through to the neutral default
 // rather than going missing.
-const PLANET_FILL = "#6ea8fe";
 const GLYPH_DEFAULT = { r: 10, fill: MUTED_INK };
+
+// --- planet tints -----------------------------------------------------------------------------
+// A planet's *family* (giant or not) comes from its own book's class, taken as correct: one fact
+// per generator, keyed by the page's generator, saying which of that book's classes are giants and
+// nothing else — no class from one book is ever mapped onto another's. Its *tint* comes from numbers
+// every generator emits: a temperature, and water coverage where the book supplies one. The book's
+// class name stays as the caption, verbatim, so the word is the book's and the colour is physics.
+
+const GIANT_CLASSES = {
+  ad2300: { GasGiant: "gas" },
+  btech: { GasGiant: "gas", IceGiant: "ice" },
+  aow: { GasGiant: "gas" },
+};
+
+const GIANT_TINTS = {
+  gas: { fill: "#c9a672", band: "#a3804f" }, // banded tan
+  ice: { fill: "#8fcfe0", band: "#67aec3" }, // pale cyan
+};
+
+// Rocky bodies by temperature band, coldest first; `wet` replaces `fill` when the book reports
+// meaningful water coverage in a band where it can be liquid. The kelvin thresholds apply to a
+// *surface* temperature and are presentation choices, not book rules — roughly Europa, Mars,
+// Earth, Mercury and Venus as the landmarks.
+const ROCK_TINTS = [
+  { name: "frozen", below: 200, fill: "#dfe9f0" }, // ice white
+  { name: "cold", below: 260, fill: "#a9b6c2" }, // grey-blue
+  { name: "temperate", below: 330, fill: "#9c8f7c", wet: "#3f96b4" }, // dun rock, or ocean blue-green
+  { name: "hot", below: 500, fill: "#c98b3f" }, // ochre
+  { name: "hothouse", below: Infinity, fill: "#e3c45a" }, // Venus yellow
+];
+const WET_COVERAGE = 0.3; // water fraction at or above which a temperate world reads as ocean
+
+// ad2300 states a temperature in words (its AverageTemperature enum) rather than a surface figure,
+// and only that word reflects the atmosphere: its HotHouse worlds sit at 330–450K blackbody, which
+// the kelvin bands would call merely hot (Venus's own blackbody temperature is a cool 230K). Where a
+// book states a temperature, that statement wins over a number we would have to interpret.
+const TEMP_WORDS = { VeryCold: "frozen", Cold: "cold", Temperate: "temperate", Hot: "hot", VeryHot: "hothouse" };
+
+// A planet's surface temperature in kelvin from whichever field its generator supplies: btech and
+// aow give one directly; the orbit's blackbody temperature (or aow's min/max pair) is the fallback
+// for a body with neither that nor a temperature word. Null when nothing readable is there.
+function planetTempK(node) {
+  const kelvin = (q) => (isQuantity(q) && q.unit === "K" ? q.value : null);
+  const direct =
+    kelvin(node.planet?.habitability?.temperature) ??
+    kelvin(node.world?.climate?.averageSurfaceTemperature) ??
+    kelvin(node.orbit?.blackbody);
+  if (direct !== null) return direct;
+  const lo = kelvin(node.orbit?.blackbodyMin);
+  const hi = kelvin(node.orbit?.blackbodyMax);
+  return lo !== null && hi !== null ? (lo + hi) / 2 : null;
+}
+
+// The temperature band for a rocky body: the book's word when it gives one, else its kelvin figure.
+function rockBand(node) {
+  const word = TEMP_WORDS[node.body?.temp];
+  if (word) return ROCK_TINTS.find((b) => b.name === word);
+  const t = planetTempK(node);
+  return t === null ? null : ROCK_TINTS.find((b) => t < b.below);
+}
+
+// Water coverage as a 0–1 fraction where the book supplies one (ad2300 `body.water`, aow
+// `hydrosphere.hydrographicCoverage`); btech has no such figure, so its worlds are never "wet".
+function waterFraction(node) {
+  const w = node.body?.water ?? node.world?.hydrosphere?.hydrographicCoverage;
+  return typeof w === "number" && isFinite(w) ? w : null;
+}
+
+function planetTint(node) {
+  const giant = GIANT_CLASSES[GENERATOR]?.[bodyLabel(node)];
+  if (giant) return GIANT_TINTS[giant];
+  const band = rockBand(node);
+  if (!band) return { fill: MUTED_INK };
+  const wet = band.wet && (waterFraction(node) ?? 0) >= WET_COVERAGE;
+  return { fill: wet ? band.wet : band.fill };
+}
+
+// Three bands across a giant's disc, drawn as chords of the circle so no clipPath (and no per-glyph
+// id) is needed. They shrink with the disc and simply vanish into it on a very small giant.
+function giantBands(x, y, r, colour) {
+  const width = n2(Math.max(1, r * 0.13));
+  return [-0.42, 0.08, 0.5]
+    .map((f) => {
+      const dy = f * r;
+      const half = Math.max(0, Math.sqrt(r * r - dy * dy) - 0.6);
+      return `<line x1="${n2(x - half)}" y1="${n2(y + dy)}" x2="${n2(x + half)}" y2="${n2(y + dy)}" stroke="${colour}" stroke-width="${width}" stroke-linecap="round" />`;
+    })
+    .join("");
+}
 
 // A radius quantity in metres, whatever unit its generator used: planets arrive in km (ad2300,
 // btech) or m (aow); stars in R☉, except white and brown dwarfs, which arrive in km. Unknown units
@@ -532,8 +622,10 @@ function bodySvg(row, b) {
     // A companion star gets the same treatment as a row head, at its relative size.
     parts.push(starGlyph(x, y, r, starTint(node)));
   } else {
-    const fill = node.kind === "planet" ? PLANET_FILL : GLYPH_DEFAULT.fill;
-    const disc = `<circle cx="${n2(x)}" cy="${n2(y)}" r="${n2(r)}" fill="${fill}" />`;
+    const tint = node.kind === "planet" ? planetTint(node) : { fill: GLYPH_DEFAULT.fill };
+    const disc =
+      `<circle cx="${n2(x)}" cy="${n2(y)}" r="${n2(r)}" fill="${tint.fill}" />` +
+      (tint.band ? giantBands(x, y, r, tint.band) : "");
     if (kids?.ring) {
       // Saturn-style: the ring's far side passes behind the planet and its near side in front, so
       // the ellipse is split at its widest points and the disc drawn between the two halves. A

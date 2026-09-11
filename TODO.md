@@ -68,14 +68,20 @@ Small, mostly no API change. Together these turn "seven identical discs" into a 
       row-head size; a companion's radius is scaled by log(R_companion / R_primary), clamped
       so a white dwarf is visibly smaller but never planet-sized. Star radius is normalised
       from R☉ or km (white and brown dwarfs arrive in km). [S]
-- [ ] **Planet colour by class.** Banded tan for gas giants, pale cyan for ice giants, grey
-      for failed cores / leftovers, terrestrials tinted by temperature from white ice through
-      blue-green temperate to ochre desert and yellow hothouse. Needs a class per body — see
-      API suggestion 1; an interim client table per generator is acceptable if labelled as
-      such. [M]
-- [ ] **Habitability dot under each planet.** Green breathable, amber marginal, red hostile.
-      Per-generator flags exist today (`humanOxygen`, `habitability.habitable`,
-      `atmosphere.breathable`); a server-side summary (API suggestion 2) would be cleaner. [S]
+- [x] **Planet colour: family from the book, tint from physics.** The *family* (giant or
+      not) comes from each book's own class, taken as correct: ad2300 `GasGiant`; btech
+      `GasGiant`, `IceGiant`; aow `GasGiant`. That is one fact per generator, not a shared
+      taxonomy, so it lives in a three-entry client table. The *tint* comes from numbers every
+      generator emits: giants banded tan (ice giants pale cyan where the book distinguishes
+      them); rocky bodies by temperature from white ice through blue-green temperate to ochre
+      and yellow hothouse, with water coverage adding blue where the book supplies it (ad2300,
+      aow; btech has no water field). The book's class name stays as the label, verbatim. No
+      API change. [M]
+- [ ] **Habitability dot under each planet.** Show each book's *own* flag as it stands, no
+      interpretation: ad2300 `humanOxygen`, btech `habitability.habitable`, aow
+      `atmosphere.breathable`. One dot, on or off. "Habitable" is relative, so no
+      marginal/hostile scale unless a book defines one; user-set criteria are a possible later
+      layer (see Open questions). [S]
 - [ ] **Moons as dots, not words.** Up to ~8 tiny dots in an arc round the planet, then
       "+23". [S]
 - [ ] **Legend.** Required as soon as colour and size mean something. [XS]
@@ -87,9 +93,11 @@ Small, mostly no API change. Together these turn "seven identical discs" into a 
 
 - [ ] **Habitable zone band.** A translucent green wedge between the orbits where liquid
       water is possible, interpolated between neighbouring orbit ellipses because spacing is
-      by rank. btech already sends `lifezone`; ad2300 and aow need it derived from luminosity
-      or supplied by the API (suggestion 3). Every star in a multi-star system gets its own
-      band in its own row. [M]
+      by rank. btech already sends `lifezone`, so do it there first. ad2300 and aow only if
+      their books define a zone and the library can expose it (API suggestion 3, under
+      consideration); no client-side derivation from luminosity, which would present a zone
+      the book never specified. Every star in a multi-star system gets its own band in its own
+      row. [M]
 - [ ] **Hover card on a glyph.** Four or five headline facts: class, radius vs Earth, gravity,
       temperature, atmosphere. HTML popover positioned off the SVG element. [M]
 - [ ] **Click a glyph to open its node.** Expands the fold-out and scrolls to that body;
@@ -198,32 +206,37 @@ bands and star-scale sizing drop in without layout changes. Trinary systems recu
 
 ## API suggestions (for `mapemounde-api`'s views)
 
-Each of these should make the API better for any client, not just this one. 1–4 do; 5–7 are
-conveniences.
+Guiding rule (decided 2026-09-11): the API reports what each book's algorithm specifies and
+does not invent cross-book categories. The three class vocabularies are different *kinds* of
+classification and are taken as correct as emitted. Physical quantities and units are fair
+game.
 
-1. **`bodyClass` on every body**, a shared enum across generators with two axes: a size class
-   (`dwarf`, `terrestrial`, `superTerrestrial`, `iceGiant`, `gasGiant`, `failedCore`) and a
-   surface class (`barren`, `desert`, `garden`, `ocean`, `ice`, `hothouse`, `none`). The
-   per-generator mapping then lives with the generator knowledge, the client draws glyphs and
-   a legend from one vocabulary, and `bodyLabel()` collapses to a lookup.
-2. **`habitability` summary on every body:** `breathable | marginal | hostile`, optionally
-   with a short reason. The rules differ per generator and belong server-side.
-3. **`habitableZone { inner, outer }` on every star, in au, for all three generators.** btech
-   has `lifezone` in metres already; normalise the name and unit.
+1. ~~**`bodyClass` on every body**, a shared enum across generators.~~ **Dropped.** It would
+   force the books' classes into categories that could mislead. Colour uses each book's own
+   giant classes for the family and physics for the tint (Phase 1).
+2. ~~**`habitability` summary on every body.**~~ **Not in the API.** Habitability is relative;
+   where a book specifies a flag the client shows that flag, and nothing more. A later option
+   is user-set criteria on the web page, purely for display (see Open questions).
+3. **`habitableZone { inner, outer }` per star, in au.** btech: yes, it already emits
+   `lifezone` in metres, so normalising name and unit is the whole job. ad2300 and aow: only
+   if the books define one; whether the library can expose it easily is being checked.
 4. **Consistent units across generators**, or Earth-relative twins alongside the existing
-   quantities: `radiusEarth`, `massEarth`, `gravityG`, `periodDays`. Twins are the least
-   disruptive change and make comparison bars trivial. At minimum, planet radius in km
-   everywhere and star radius in R☉ everywhere.
-5. **`label` on every node** (a display string), so the client stops synthesising one.
-6. **`summary` on every system:** counts of planets by class, moons, belts, habitable worlds,
-   stars. Cheap server-side; saves the client a tree walk for the summary strip and thumbnails.
-7. **`frostLine` on every star, in au,** if the library computes it, for the distance strip.
+   quantities: `radiusEarth`, `massEarth`, `gravityG`, `periodDays`. **Agreed.** The library
+   can change measurement units easily; it needs hooks in the web-api. This retires the
+   client's unit tables (`RADIUS_UNIT_M` today; density and mass would follow for colour and
+   comparison bars).
+5. **`label` on every node** (a display string), so the client stops synthesising one. Low
+   value now that the label is simply the book's own class name.
+6. **`summary` on every system:** counts of planets by book class, moons, belts, stars. Cheap
+   server-side; saves the client a tree walk for the summary strip and thumbnails.
+7. **`frostLine` on every star, in au,** if a book defines it, for the distance strip.
 
 ## Open questions
 
-- What counts as *habitable* / *marginal* per generator? Candidate rules: ad2300
-  `humanOxygen && temp ∈ {Cool, Temperate, Warm}`, btech `habitability.habitable`, aow
-  `atmosphere.breathable` plus a hydrosphere check. Best settled once, server-side.
+- **User-set habitability criteria** (later): rather than the API or the client deciding what
+  "habitable" means, let the GM set display thresholds on the page (temperature range,
+  pressure range, gravity range, breathable required) and highlight matching worlds. Purely
+  presentational; the books' own flags remain the only "habitable" the data asserts.
 - Should moons appear in the glance beyond a count? In some settings a gas giant's moons are
   the habitable candidates.
 - Do names live only in saved systems, or also in the URL for sharing?
