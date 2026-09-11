@@ -376,9 +376,9 @@ const GIANT_TINTS = {
 // *surface* temperature and are presentation choices, not book rules — roughly Europa, Mars,
 // Earth, Mercury and Venus as the landmarks.
 const ROCK_TINTS = [
-  { name: "frozen", below: 200, fill: "#dfe9f0" }, // ice white
-  { name: "cold", below: 260, fill: "#a9b6c2" }, // grey-blue
-  { name: "temperate", below: 330, fill: "#9c8f7c", wet: "#3f96b4" }, // dun rock, or ocean blue-green
+  { name: "frozen", below: 200, fill: "#e6eef4" }, // ice white
+  { name: "cold", below: 260, fill: "#6a8fc4" }, // steel blue — a clear step from ice white
+  { name: "temperate", below: 330, fill: "#9c8f7c", wet: "#3aa08e" }, // dun rock, or ocean green-teal
   { name: "hot", below: 500, fill: "#c98b3f" }, // ochre
   { name: "hothouse", below: Infinity, fill: "#e3c45a" }, // Venus yellow
 ];
@@ -420,13 +420,15 @@ function waterFraction(node) {
   return typeof w === "number" && isFinite(w) ? w : null;
 }
 
+// Returns the fill (and band colour for a giant) plus a `key` naming the choice — a giant kind, a
+// rock band name, "ocean" or "unknown" — which is what the legend lists.
 function planetTint(node) {
   const giant = GIANT_CLASSES[GENERATOR]?.[bodyLabel(node)];
-  if (giant) return GIANT_TINTS[giant];
+  if (giant) return { key: giant, ...GIANT_TINTS[giant] };
   const band = rockBand(node);
-  if (!band) return { fill: MUTED_INK };
+  if (!band) return { key: "unknown", fill: MUTED_INK };
   const wet = band.wet && (waterFraction(node) ?? 0) >= WET_COVERAGE;
-  return { fill: wet ? band.wet : band.fill };
+  return wet ? { key: "ocean", fill: band.wet } : { key: band.name, fill: band.fill };
 }
 
 // The book's own habitability flag — ad2300 `humanOxygen`, btech `habitability.habitable`, aow
@@ -454,6 +456,20 @@ function moonDots(x, y, r, moons) {
     const a = -Math.PI / 2 + (n > 1 ? -span / 2 + (i * span) / (n - 1) : 0);
     return `<circle cx="${n2(x + radius * Math.cos(a))}" cy="${n2(y + radius * Math.sin(a))}" r="1.7" fill="${MOON_INK}" />`;
   }).join("");
+}
+
+// A Saturn-style ring round a disc of radius r. The far half passes behind the planet and the near
+// half in front, so the ellipse is split at its widest points for the caller to draw the disc between
+// them; a single ellipse would sit wholly on top and read as a hoop in front of the planet. The ring
+// scales with the disc but has a floor, so a ringed dwarf still reads as ringed rather than as a dot
+// with a line through it.
+function ringPaths(x, y, r) {
+  const rx = Math.max(2 * r, 14);
+  const ry = rx * 0.275;
+  // sweep=1 is the top (far) half, sweep=0 the bottom (near) half; both share the same tilt.
+  const half = (sweep) =>
+    `<path d="M${n2(x - rx)},${n2(y)} A${n2(rx)},${n2(ry)} 0 0 ${sweep} ${n2(x + rx)},${n2(y)}" fill="none" stroke="${RING_INK}" stroke-width="2.5" transform="rotate(-18 ${n2(x)} ${n2(y)})" />`;
+  return { far: half(1), near: half(0) };
 }
 
 // Three bands across a giant's disc, drawn as chords of the circle so no clipPath (and no per-glyph
@@ -597,22 +613,23 @@ function orbitLabel(q) {
   return `${escapeHtml(figure)}<tspan fill="${MUTED_INK}" dx="2">${escapeHtml(q.unit)}</tspan>`;
 }
 
-function starGlyph(x, y, r, tint) {
-  return `<circle cx="${n2(x)}" cy="${n2(y)}" r="${n2(r * 1.5)}" fill="url(#orreryGlow${tint})" />
-    <circle cx="${n2(x)}" cy="${n2(y)}" r="${n2(r)}" fill="url(#orreryStar${tint})" />`;
+// `ids` prefixes the gradient ids, so the legend's swatch and the orrery can share one page.
+function starGlyph(x, y, r, tint, ids = "orrery") {
+  return `<circle cx="${n2(x)}" cy="${n2(y)}" r="${n2(r * 1.5)}" fill="url(#${ids}Glow${tint})" />
+    <circle cx="${n2(x)}" cy="${n2(y)}" r="${n2(r)}" fill="url(#${ids}Star${tint})" />`;
 }
 
 // One gradient pair per spectral class actually present, rather than all eleven every time.
-function starTintDefs(tints) {
+function starTintDefs(tints, ids = "orrery") {
   return [...tints]
     .map((t) => {
       const c = STAR_TINTS[t];
-      return `<radialGradient id="orreryStar${t}" cx="38%" cy="34%" r="72%">
+      return `<radialGradient id="${ids}Star${t}" cx="38%" cy="34%" r="72%">
         <stop offset="0%" stop-color="${c.core}" />
         <stop offset="55%" stop-color="${c.mid}" />
         <stop offset="100%" stop-color="${c.edge}" />
       </radialGradient>
-      <radialGradient id="orreryGlow${t}">
+      <radialGradient id="${ids}Glow${t}">
         <stop offset="55%" stop-color="${c.mid}" stop-opacity="0.3" />
         <stop offset="100%" stop-color="${c.mid}" stop-opacity="0" />
       </radialGradient>`;
@@ -657,17 +674,8 @@ function bodySvg(row, b) {
       `<circle cx="${n2(x)}" cy="${n2(y)}" r="${n2(r)}" fill="${tint.fill}" />` +
       (tint.band ? giantBands(x, y, r, tint.band) : "");
     if (kids?.ring) {
-      // Saturn-style: the ring's far side passes behind the planet and its near side in front, so
-      // the ellipse is split at its widest points and the disc drawn between the two halves. A
-      // single ellipse would sit wholly on top and read as a hoop in front of the planet.
-      // sweep=1 is the top (far) half, sweep=0 the bottom (near) half; both share the same tilt.
-      // The ring scales with the disc but has a floor, so a ringed dwarf still reads as ringed
-      // rather than as a dot with a line through it.
-      const rx = Math.max(2 * r, 14);
-      const ry = rx * 0.275;
-      const half = (sweep) =>
-        `<path d="M${n2(x - rx)},${n2(y)} A${n2(rx)},${n2(ry)} 0 0 ${sweep} ${n2(x + rx)},${n2(y)}" fill="none" stroke="${RING_INK}" stroke-width="2.5" transform="rotate(-18 ${n2(x)} ${n2(y)})" />`;
-      parts.push(half(1), disc, half(0));
+      const ring = ringPaths(x, y, r);
+      parts.push(ring.far, disc, ring.near);
     } else {
       parts.push(disc);
     }
@@ -754,6 +762,89 @@ function renderOrrerySvg(root) {
   </svg>`;
 }
 
+// --- legend -----------------------------------------------------------------------------------
+// What the orrery's marks mean, drawn with the orrery's own functions and colours so the two cannot
+// drift apart, and listing only the marks the system in front of the reader actually uses — a legend
+// decodes the picture at hand, and a full vocabulary would be three rows for a one-row need. The
+// scale rules (planet size, orbit spacing, companion size) are one sentence, not swatches. Built per
+// generator: the habitability dot is named in each book's own terms rather than as a shared notion
+// of "habitable".
+
+const HABITABLE_FLAG_NAME = {
+  ad2300: "human-breathable oxygen",
+  btech: "habitable",
+  aow: "breathable atmosphere",
+};
+
+const SWATCH = 22; // rendered size; drawn in a 30-unit box so glyph helpers keep their proportions
+
+// Which marks the orrery drew for this system: the same walk layoutOrrery makes (each star's direct
+// children, recursing into companions with children), asking the same functions bodySvg does.
+function usedMarks(root) {
+  const marks = new Set();
+  const visit = (star) => {
+    for (const node of star.children || []) {
+      if (node.kind === "star") {
+        if ((node.children || []).length) visit(node);
+        continue;
+      }
+      if (node.kind === "asteroidBelt") {
+        marks.add("belt");
+        continue;
+      }
+      if (node.kind === "planet") {
+        marks.add(planetTint(node).key);
+        if (habitableFlag(node)) marks.add("habitable");
+      }
+      const kids = childSummary(node);
+      if (kids.ring) marks.add("ring");
+      if (kids.moons) marks.add("moons");
+    }
+  };
+  visit(root);
+  return marks;
+}
+
+function swatch(inner, boxes = 1) {
+  return `<svg class="swatch" viewBox="0 0 ${30 * boxes} 30" width="${SWATCH * boxes}" height="${SWATCH}" aria-hidden="true">${inner}</svg>`;
+}
+
+function legendHtml(root) {
+  const used = usedMarks(root);
+  const c = 15; // swatch centre
+  const disc = (cx, cy, r, fill) => `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${fill}" />`;
+  const rock = ROCK_TINTS[2].fill;
+  const items = [];
+  const add = (svg, label) => items.push(`<li>${svg}<span>${label}</span></li>`);
+
+  for (const [kind, tint] of Object.entries(GIANT_TINTS)) {
+    if (used.has(kind)) add(swatch(disc(c, c, 9, tint.fill) + giantBands(c, c, 9, tint.band)), `${kind} giant`);
+  }
+  // Rock bands: individually when one or two are present, else as one strip in temperature order,
+  // labelled by its ends, since four discs and four words would take a third of the row.
+  const bands = ROCK_TINTS.filter((b) => used.has(b.name));
+  if (bands.length <= 2) {
+    for (const b of bands) add(swatch(disc(c, c, 7, b.fill)), b.name);
+  } else {
+    const discs = bands.map((b, i) => disc(c + 30 * i, c, 7, b.fill)).join("");
+    add(swatch(discs, bands.length), `${bands[0].name} → ${bands[bands.length - 1].name}`);
+  }
+  if (used.has("ocean")) add(swatch(disc(c, c, 7, ROCK_TINTS.find((b) => b.wet).wet)), "ocean");
+  if (used.has("unknown")) add(swatch(disc(c, c, 7, MUTED_INK)), "unknown");
+  if (used.has("ring")) {
+    const ring = ringPaths(c, c, 6);
+    add(swatch(ring.far + disc(c, c, 6, rock) + ring.near), "ring");
+  }
+  if (used.has("belt")) add(swatch(beltGlyph({ x: c - 10, y: c }, { rx: 10, ry: 40 })), "asteroid belt");
+  if (used.has("moons")) add(swatch(disc(c, c + 4, 6, rock) + moonDots(c, c + 4, 6, 5)), `moons (${MOON_DOTS_MAX} max, then a count)`);
+  if (used.has("habitable")) {
+    add(swatch(disc(c, c - 3, 6, rock) + disc(c, c + 9, 2.8, HABITABLE_INK)), `${HABITABLE_FLAG_NAME[GENERATOR] || "habitable"}, the book's own flag`);
+  }
+
+  return `<ul class="legend">${items.join("")}</ul>
+    <p class="legend-note">Planets are sized by log radius; orbits are spaced by rank, with the true radius printed beneath; companion stars are sized relative to the primary.</p>`;
+}
+
 // --- tree renderer ----------------------------------------------------------------------------
 
 // Fields every node carries; everything else is generator-specific richness rendered generically.
@@ -805,7 +896,7 @@ function renderMeta(data) {
 // A system tree (ad2300/btech/aow). The orrery carries the shape of the system; the full per-body
 // detail folds away below it, since a btech tree runs to ~150 nodes.
 function render(data) {
-  return `<div class="card orrery-card">${renderOrrerySvg(data.root)}</div>
+  return `<div class="card orrery-card">${renderOrrerySvg(data.root)}${legendHtml(data.root)}</div>
     <div class="card">
       ${renderMeta(data)}
       <details class="tree-wrap">

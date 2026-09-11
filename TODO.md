@@ -84,7 +84,8 @@ Small, mostly no API change. Together these turn "seven identical discs" into a 
       layer (see Open questions). [S]
 - [x] **Moons as dots, not words.** Up to 8 tiny dots on an arc over the planet; past that the
       arc is full and the count is written under the label instead. [S]
-- [ ] **Legend.** Required as soon as colour and size mean something. [XS]
+- [x] **Legend.** Under the orrery, drawn with the orrery's own functions and colours; per
+      generator (ice giant only for btech, habitability flag named in each book's terms). [XS]
 - [ ] **Fit to width.** See *Shrink vs scroll* below. Shrink with a legibility floor, then
       shed secondary label lines, then wrap. [S for plain scale-to-fit, M with the floor and
       wrapping]

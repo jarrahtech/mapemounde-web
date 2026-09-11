@@ -201,6 +201,37 @@ section#result {
   color: var(--text);
 }
 
+/* Legend under the orrery: only the marks this system uses, in the orrery's own colours. Sits
+   inside the scrolling card but wraps to the visible width, so it never scrolls with a wide system. */
+.legend {
+  list-style: none;
+  margin: 0.4rem 0 0;
+  padding: 0.45rem 0.75rem 0;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.1rem 0.9rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.swatch {
+  flex: none;
+}
+
+.legend-note {
+  margin: 0.2rem 0 0.15rem;
+  padding: 0 0.75rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
 /* The folded-away per-body detail under the orrery. */
 .tree-wrap > summary {
   margin-bottom: 0.5rem;
