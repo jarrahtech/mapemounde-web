@@ -26,3 +26,6 @@
   planet 3, a Rock of 500 km; seed 26, where six of seven planets are ringed. Rings round bodies that small are
   not impossible, but the frequency may be worth a look. The Desert worlds at 73 to 114 K are not an issue: the
   book's own word calls them VeryCold, so Desert there means dry, not hot.
+* AoW seed 4 has a D7 white-dwarf primary with six gas giants between 0.02 and
+  0.47 au, and seed 43 a D4 primary with planets from 0.017 au. Planets that close to a star that has been
+  through its giant phase may be worth a look against the book.

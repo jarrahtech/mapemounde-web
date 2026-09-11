@@ -86,9 +86,23 @@ Small, mostly no API change. Together these turn "seven identical discs" into a 
       arc is full and the count is written under the label instead. [S]
 - [x] **Legend.** Under the orrery, drawn with the orrery's own functions and colours; per
       generator (ice giant only for btech, habitability flag named in each book's terms). [XS]
-- [ ] **Fit to width.** See *Shrink vs scroll* below. Shrink with a legibility floor, then
-      shed secondary label lines, then wrap. [S for plain scale-to-fit, M with the floor and
-      wrapping]
+- [x] **Fit to width.** The orrery scales down to the card, never below 0.72 (systems up to
+      ten bodies stay in one row); a star whose row would need less is split into balanced
+      continuation strips — no star, a short arc of each orbit, a dashed connector from where the
+      previous row ran out, a tighter gap — and the orrery re-fits on window resize. Shedding
+      label lines proved unnecessary once rows wrap. Horizontal scroll remains only as a fallback
+      that should not trigger. [M]
+- [ ] **Revisit the wide-system layout.** The strips work but still do not look right. Tried so
+      far: a single scrolling row (hides the outer half), continuation rows with a ghost star and
+      restarted orbits (reads as a second system), and the current strips (arcs and a connector).
+      The constraint: 13–16 bodies cannot share one 936px row at meaningful glyph sizes, since a
+      ringed giant alone is 88px wide. Directions not yet tried: staggered labels with a tighter
+      step (labels alternate above and below, step down to ~70px, so ~11 bodies fit unsplit);
+      a serpentine row that turns at the edge and continues right-to-left, so the eye follows
+      one line; the log-distance strip (Phase 4) as the whole-system view with the orrery
+      allowed to scroll; a radial or quarter-circle layout; or simply a lower floor with labels
+      dropped below 0.72 once the hover card carries them. Decide with screenshots side by side,
+      on the widest seeds (btech 44, aow 4). [M]
 
 ## Phase 2 — the dig
 

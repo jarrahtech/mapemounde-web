@@ -184,11 +184,11 @@ section#result {
   margin-left: auto;
 }
 
-/* System orrery: a schematic map of the generated system, drawn as inline SVG at its natural size.
-   A wide system (btech tops out around 14 bodies) scrolls inside its own card rather than shrinking
-   the labels to nothing — and, importantly, without the page body scrolling sideways.
-   Centred with margin:auto rather than .hex-card's flex, because centring an over-wide flex item
-   makes its leading overflow unreachable to the scroll container. */
+/* System orrery: a schematic map of the generated system, drawn as inline SVG. It scales down to
+   the card's width (app.js splits wide systems into rows so the scale never drops below 0.72); the
+   overflow-x is a last resort that should not trigger, kept so the page body can never scroll
+   sideways. Centred with margin:auto rather than .hex-card's flex, because centring an over-wide
+   flex item makes its leading overflow unreachable to the scroll container. */
 .orrery-card {
   overflow-x: auto;
   padding: 0.5rem;
@@ -197,6 +197,7 @@ section#result {
 .orrery-svg {
   display: block;
   margin: 0 auto;
+  width: 100%; /* scales down to the card; the inline max-width stops it scaling up */
   height: auto;
   color: var(--text);
 }

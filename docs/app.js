@@ -257,7 +257,7 @@ function downloadSvg() {
   const xml = '<?xml version="1.0" encoding="UTF-8"?>\n' + serialized;
   const blob = new Blob([xml], { type: "image/svg+xml;charset=utf-8" });
   const url = URL.createObjectURL(blob);
-  const base = (els.systemName.value || lastTravellerData?.seed || "hex")
+  const base = (els.systemName.value || lastData?.seed || "hex")
     .trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "hex";
   const a = document.createElement("a");
   a.href = url;
@@ -266,14 +266,15 @@ function downloadSvg() {
   URL.revokeObjectURL(url);
 }
 
-// Last traveller payload, so the name field can re-render the hex without re-fetching.
-let lastTravellerData = null;
+// The last payload: the traveller name field re-draws the hex from it without re-fetching, and a
+// window resize re-fits the orrery from it.
+let lastData = null;
 
 // Everything the traveller page does with a payload: draw the hex with the current name, keep the
 // payload for live re-drawing as the name is typed, then fit the name to the hex (which must run
 // after the SVG is in the DOM).
 function showTraveller(data) {
-  lastTravellerData = data;
+  lastData = data;
   els.rendered.innerHTML = travellerCardHtml(data, els.systemName.value);
   fitHexName();
 }
@@ -307,12 +308,18 @@ const ORRERY = {
   lead: 70, // gap from the star's edge out to the first orbit
   maxRy: 110, // vertical half-height of the outermost orbit ellipse
   rowGap: 250, // vertical distance from a star's row to a companion star's row
+  stripGap: 180, // to a continuation strip, which has no star and no full ellipses to clear
   rootStar: 48, // radius of the system's primary; companions use the standard star glyph
   labelTop: 44, // first label line, measured down from the orbit baseline
   lineHeight: 18,
   padX: 24,
   padY: 22,
 };
+
+// Fit to width: the drawing scales down to fill the card, but never below MIN_SCALE (12px labels at
+// 0.72 are 8.6px — small, but the glyphs carry the meaning). A row that would need less is split into
+// balanced continuation strips.
+const MIN_SCALE = 0.72;
 
 const MUTED_INK = "#8a94a3";
 const RING_INK = "#c2a8e0"; // rings and asteroid belts
@@ -558,13 +565,17 @@ function childSummary(node) {
 // its glyph — hence the recursion rather than a single flat pass. Every row starts at the left
 // margin rather than under the companion's glyph: a companion in the outermost orbit would
 // otherwise push its own row a screen-width to the right and leave the card mostly empty.
-function layoutOrrery(root) {
+// `available` is the width the card can show; a star's bodies are split across as many rows as it
+// takes to keep the drawing at or above MIN_SCALE, balanced so a twelve-body system is 6 + 6 rather
+// than 10 + 2. Rows after the first are continuation *strips*: the same bodies at the same spacing,
+// but with no star and only a short arc of each orbit, joined to the previous row by a connector, so
+// they read as that row continuing outward rather than as a second system. Pass nothing (or 0) for a
+// single row per star regardless of width.
+function layoutOrrery(root, available = 0) {
   const rows = [];
   let nextY = ORRERY.padY + Math.max(ORRERY.maxRy, ORRERY.rootStar);
 
   const walk = (star, depth, link) => {
-    const originY = nextY;
-    nextY += ORRERY.rowGap;
     // A companion heads its own row at the size it was drawn in its primary's row (carried in link).
     const starR = depth === 0 ? ORRERY.rootStar : link.r;
     const originX = ORRERY.padX + starR;
@@ -576,24 +587,52 @@ function layoutOrrery(root) {
     const orbitOf = (node) => node.orbit?.radius?.value ?? Infinity;
     const kids = [...(star.children || [])].sort((a, b) => orbitOf(a) - orbitOf(b));
     const lead = starR + ORRERY.lead;
-    const maxRx = lead + (kids.length - 1) * ORRERY.step;
-    // Only rx and the glyph radius are stored per body; x/y follow from the row, so they are read
-    // off it at draw time rather than copied onto every child.
-    const bodies = kids.map((node, i) => {
-      const rx = lead + i * ORRERY.step;
-      // Squash the ellipses sub-linearly so the outermost orbit tops out at maxRy: a straight
-      // rx * ratio would make a 14-body system over 900px tall.
-      return { node, rx, ry: ORRERY.maxRy * Math.sqrt(rx / maxRx), r: bodyRadiusPx(node, root) };
-    });
 
-    rows.push({ node: star, x: originX, y: originY, r: starR, bodies, link });
-    for (const b of bodies) {
-      if (b.node.kind === "star" && (b.node.children || []).length) {
-        // Carry the radius the layout chose, so the tether stays attached and the companion's own
-        // row head is the same size as its glyph up here.
-        walk(b.node, depth + 1, { x: originX + b.rx, y: originY, r: b.r });
+    // How many bodies fit in one row before the whole drawing would have to scale below MIN_SCALE:
+    // the fixed part is margins, the star (which sits at padX + starR and starts the lead-in, so it
+    // counts twice), the lead-in and the half step past the last glyph.
+    const fixed = 2 * ORRERY.padX + 2 * starR + ORRERY.lead + ORRERY.step / 2;
+    const limit = available > 0 ? Math.max(2, Math.floor((available / MIN_SCALE - fixed) / ORRERY.step) + 1) : Infinity;
+    const rowCount = Math.max(1, Math.ceil(kids.length / limit));
+    const perRow = Math.ceil(kids.length / rowCount) || 1;
+    const chunks = [];
+    for (let i = 0; i < kids.length; i += perRow) chunks.push(kids.slice(i, i + perRow));
+    if (!chunks.length) chunks.push([]);
+
+    const companions = [];
+    let prevRow = null;
+    chunks.forEach((chunk, ci) => {
+      const originY = ci === 0 ? nextY : prevRow.y + ORRERY.stripGap;
+      nextY = originY + ORRERY.rowGap;
+      const maxRx = lead + (chunk.length - 1) * ORRERY.step;
+      // Only rx and the glyph radius are stored per body; x/y follow from the row, so they are read
+      // off it at draw time rather than copied onto every child.
+      const bodies = chunk.map((node, i) => {
+        const rx = lead + i * ORRERY.step;
+        // Squash the ellipses sub-linearly so the outermost orbit tops out at maxRy: a straight
+        // rx * ratio would make a 14-body system over 900px tall.
+        return { node, rx, ry: ORRERY.maxRy * Math.sqrt(rx / maxRx), r: bodyRadiusPx(node, root) };
+      });
+      // A strip re-bases the orbit ranks from its own left edge; spacing is schematic anyway, and the
+      // true radius is printed under every body. `from` is where the previous row ran out, for the
+      // connector.
+      const row = {
+        node: star, x: originX, y: originY, r: starR, bodies,
+        link: ci === 0 ? link : null,
+        from: ci > 0 ? { x: prevRow.x + prevRow.bodies[prevRow.bodies.length - 1].rx + ORRERY.step / 2, y: prevRow.y } : null,
+      };
+      rows.push(row);
+      prevRow = row;
+      for (const b of bodies) {
+        if (b.node.kind === "star" && (b.node.children || []).length) {
+          // Carry the radius the layout chose, so the tether stays attached and the companion's own
+          // row head is the same size as its glyph up here.
+          companions.push({ node: b.node, link: { x: originX + b.rx, y: originY, r: b.r } });
+        }
       }
-    }
+    });
+    // A companion's own rows come after all of its primary's rows.
+    for (const c of companions) walk(c.node, depth + 1, c.link);
   };
 
   walk(root, 0, null);
@@ -708,6 +747,14 @@ function bodySvg(row, b) {
   return parts.join("");
 }
 
+// The piece of a body's orbit ellipse either side of the baseline crossing where the body sits.
+function orbitArc(row, b) {
+  const a = 0.4; // radians either side of the crossing
+  const dx = b.rx * Math.cos(a);
+  const dy = b.ry * Math.sin(a);
+  return `<path d="M${n2(row.x + dx)},${n2(row.y - dy)} A${n2(b.rx)},${n2(b.ry)} 0 0 1 ${n2(row.x + dx)},${n2(row.y + dy)}" fill="none" stroke="currentColor" stroke-opacity="0.28" stroke-width="1" />`;
+}
+
 function orreryRowSvg(row) {
   const parts = [];
   // Dashed tether from the companion's glyph in its primary's row down to its own row. An S-curve
@@ -720,12 +767,27 @@ function orreryRowSvg(row) {
     const mid = sy + (ey - sy) / 2;
     parts.push(`<path d="M${n2(sx)},${n2(sy)} C${n2(sx)},${n2(mid)} ${n2(ex)},${n2(mid)} ${n2(ex)},${n2(ey)}" fill="none" stroke="currentColor" stroke-opacity="0.3" stroke-dasharray="4 4" />`);
   }
-  // Orbits first, so the glyphs sit on top of the lines.
-  for (const b of row.bodies) {
-    parts.push(`<ellipse cx="${n2(row.x)}" cy="${n2(row.y)}" rx="${n2(b.rx)}" ry="${n2(b.ry)}" fill="none" stroke="currentColor" stroke-opacity="0.28" stroke-width="1" />`);
+  if (row.from) {
+    // A continuation strip: a dashed connector from where the previous row ran out down to the
+    // strip's baseline, in the tether's style, then a short arc of each orbit through its body —
+    // enough curvature to say "orbit" without drawing the centre the strip does not have.
+    // It drops straight down past the last body's label block before curving, so the sweep never
+    // crosses that label.
+    const sx = row.from.x;
+    const sy = row.from.y + LABEL_DEPTH;
+    const ex = row.x + row.bodies[0].rx - ORRERY.step / 2;
+    const ey = row.y;
+    const mid = sy + (ey - sy) / 2;
+    parts.push(`<path class="orrery-cont" d="M${n2(sx)},${n2(row.from.y)} L${n2(sx)},${n2(sy)} C${n2(sx)},${n2(mid)} ${n2(ex)},${n2(mid)} ${n2(ex)},${n2(ey)}" fill="none" stroke="currentColor" stroke-opacity="0.3" stroke-dasharray="4 4" />`);
+    for (const b of row.bodies) parts.push(orbitArc(row, b));
+  } else {
+    // Orbits first, so the glyphs sit on top of the lines.
+    for (const b of row.bodies) {
+      parts.push(`<ellipse cx="${n2(row.x)}" cy="${n2(row.y)}" rx="${n2(b.rx)}" ry="${n2(b.ry)}" fill="none" stroke="currentColor" stroke-opacity="0.28" stroke-width="1" />`);
+    }
+    parts.push(starGlyph(row.x, row.y, row.r, starTint(row.node)));
+    parts.push(svgText(row.x, row.y + row.r + 22, escapeHtml(bodyLabel(row.node)), 13, "currentColor", 600));
   }
-  parts.push(starGlyph(row.x, row.y, row.r, starTint(row.node)));
-  parts.push(svgText(row.x, row.y + row.r + 22, escapeHtml(bodyLabel(row.node)), 13, "currentColor", 600));
   for (const b of row.bodies) parts.push(bodySvg(row, b));
   return parts.join("");
 }
@@ -733,8 +795,8 @@ function orreryRowSvg(row) {
 // How far a row's label block reaches below its baseline: three lines plus a descender.
 const LABEL_DEPTH = ORRERY.labelTop + 2 * ORRERY.lineHeight + 8;
 
-function renderOrrerySvg(root) {
-  const rows = layoutOrrery(root);
+function renderOrrerySvg(root, available = 0) {
+  const rows = layoutOrrery(root, available);
 
   let width = 0;
   let height = 0;
@@ -749,14 +811,18 @@ function renderOrrerySvg(root) {
       ? row.bodies[row.bodies.length - 1].rx + ORRERY.step / 2
       : row.r;
     width = Math.max(width, row.x + reach + ORRERY.padX);
-    // Whichever is deeper: the row's outermost orbit, or its label block. Taken over every row
-    // rather than the last one, so the canvas does not depend on the order layoutOrrery emits.
-    height = Math.max(height, row.y + Math.max(ORRERY.maxRy, LABEL_DEPTH) + ORRERY.padY);
+    // Whichever is deeper: the row's outermost orbit, or its label block (a strip has only arcs, so
+    // just the labels). Taken over every row rather than the last one, so the canvas does not depend
+    // on the order layoutOrrery emits.
+    const below = row.from ? LABEL_DEPTH : Math.max(ORRERY.maxRy, LABEL_DEPTH);
+    height = Math.max(height, row.y + below + ORRERY.padY);
   }
   const w = Math.ceil(width);
   const h = Math.ceil(height);
 
-  return `<svg class="orrery-svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Schematic map of the generated system">
+  // max-width pins the natural size, so CSS width:100% scales a wide drawing down and never blows a
+  // small one up. Rows are already split so that scale stays at or above MIN_SCALE.
+  return `<svg class="orrery-svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" style="max-width:${w}px" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Schematic map of the generated system">
     <defs>${starTintDefs(tints)}</defs>
     ${rows.map(orreryRowSvg).join("")}
   </svg>`;
@@ -895,8 +961,19 @@ function renderMeta(data) {
 
 // A system tree (ad2300/btech/aow). The orrery carries the shape of the system; the full per-body
 // detail folds away below it, since a btech tree runs to ~150 nodes.
+// The width the orrery card can show. Measured off the form rather than the result section, which
+// is hidden while a request is in flight: both are full-width children of <main>, so they match.
+// The 18px is the card's own padding and border.
+function availableWidth() {
+  return (els.form.clientWidth || 0) - 18;
+}
+
+function orreryCardHtml(root) {
+  return renderOrrerySvg(root, availableWidth()) + legendHtml(root);
+}
+
 function render(data) {
-  return `<div class="card orrery-card">${renderOrrerySvg(data.root)}${legendHtml(data.root)}</div>
+  return `<div class="card orrery-card">${orreryCardHtml(data.root)}</div>
     <div class="card">
       ${renderMeta(data)}
       <details class="tree-wrap">
@@ -940,7 +1017,10 @@ async function generate({ updateUrl = true } = {}) {
 
     // Traveller is a flat UWP record shown as the system hex; every other generator is a tree.
     if (GENERATOR === "traveller") showTraveller(body);
-    else els.rendered.innerHTML = render(body);
+    else {
+      lastData = body;
+      els.rendered.innerHTML = render(body);
+    }
     els.result.hidden = false;
     setStatus(`OK (${url})`, false);
     if (updateUrl) pushUrlParams();
@@ -973,6 +1053,18 @@ document.addEventListener("keydown", (event) => {
   randomSystem();
 });
 
+// A resize can cross a wrap threshold, so re-fit the orrery from the last payload — just the orrery
+// card, so an open "System detail" stays open. Debounced: a drag fires resize continuously.
+let resizeTimer = 0;
+window.addEventListener("resize", () => {
+  if (!lastData?.root) return;
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    const card = els.rendered.querySelector(".orrery-card");
+    if (card) card.innerHTML = orreryCardHtml(lastData.root);
+  }, 150);
+});
+
 // Back/Forward: the URL names the system to show, so re-fetch it (generation is deterministic).
 window.addEventListener("popstate", () => {
   if (readUrlParams()) generate({ updateUrl: false });
@@ -982,7 +1074,7 @@ window.addEventListener("popstate", () => {
 // and let the button export the current hex as an SVG. Both controls exist only on the traveller page.
 if (els.systemName) {
   els.systemName.addEventListener("input", () => {
-    if (lastTravellerData) showTraveller(lastTravellerData);
+    if (lastData) showTraveller(lastData);
   });
 }
 if (els.downloadSvg) els.downloadSvg.addEventListener("click", downloadSvg);
