@@ -647,6 +647,24 @@ code {
   vertical-align: 0.05em;
 }
 
+/* Moon strip: a planet's satellites on a log axis, above their folded records. */
+.moon-strip {
+  display: block;
+  width: 100%;
+  max-width: 640px;
+  height: auto;
+  margin: 0.35rem 0 0.1rem;
+  color: var(--text);
+}
+
+.moons-wrap {
+  margin-top: 0.1rem;
+}
+
+.moons-wrap > summary {
+  font-size: 0.85rem;
+}
+
 /* Nested grids (e.g. an AoW world's climate/atmosphere) indent slightly for legibility. */
 .grid dd > .grid {
   margin: 0.15rem 0 0.35rem;

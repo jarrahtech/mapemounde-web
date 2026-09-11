@@ -1194,8 +1194,68 @@ function portraitSvg(node) {
   return `<svg class="portrait" viewBox="0 0 ${w} 26" width="32" height="21" aria-hidden="true">${inner}</svg>`;
 }
 
-// `hasGlyph` is true for bodies the orrery draws — stars and a star's direct children — whose
-// record id then doubles as a link back up to the glyph.
+// --- moon strip -------------------------------------------------------------------------------
+// A planet's satellites as one compact line above their folded records: a log-scale axis of orbit
+// radius with the planet at the left, each moon a dot sized by its radius and each ring a mark,
+// decade ticks, and the innermost and outermost radii printed. A btech giant carries twenty or
+// thirty moons, whose records alone ran to many screens; the fold keeps them one click away. Each
+// dot is a hover target like the map's glyphs, so the hover card, the record→glyph highlight and
+// the id link all work for moons. Dots are grey until the moon-colour item lands (TODO.md).
+
+const STRIP = { w: 600, h: 46, x0: 46, x1: 586, y: 24 };
+const isSatellite = (n) => n.kind === "moon" || n.kind === "moonlet" || n.kind === "ring";
+
+function orbitKm(node) {
+  const q = node.orbit?.radius;
+  if (!isQuantity(q)) return null;
+  return q.unit === "km" ? q.value : q.unit === "m" ? q.value / 1e3 : q.unit === "au" ? (q.value * AU_M) / 1e3 : null;
+}
+
+function moonStripSvg(node) {
+  const sats = (node.children || []).filter(isSatellite).map((s) => ({ s, km: orbitKm(s) })).filter((x) => x.km > 0);
+  if (!sats.length) return "";
+  const logs = sats.map((x) => Math.log10(x.km));
+  let lo = Math.min(...logs);
+  let hi = Math.max(...logs);
+  if (hi - lo < 0.4) {
+    const mid = (lo + hi) / 2;
+    lo = mid - 0.2;
+    hi = mid + 0.2;
+  }
+  const pad = (hi - lo) * 0.06;
+  lo -= pad;
+  hi += pad;
+  const X = (km) => STRIP.x0 + ((Math.log10(km) - lo) / (hi - lo)) * (STRIP.x1 - STRIP.x0);
+  const y = STRIP.y;
+  const parts = [`<line x1="${STRIP.x0}" y1="${y}" x2="${STRIP.x1}" y2="${y}" stroke="currentColor" stroke-opacity="0.25" />`];
+  for (let e = Math.ceil(lo); e <= Math.floor(hi); e++) {
+    const x = n2(X(10 ** e));
+    parts.push(`<line x1="${x}" y1="${y - 4}" x2="${x}" y2="${y + 4}" stroke="currentColor" stroke-opacity="0.35" />`);
+  }
+  // The planet, as the portrait draws it, at the left.
+  const tint = planetTint(node);
+  parts.push(`<circle cx="18" cy="${y}" r="9" fill="${tint.fill}" />` + (tint.band ? giantBands(18, y, 9, tint.band) : ""));
+  for (const { s, km } of sats) {
+    const x = n2(X(km));
+    if (s.kind === "ring") {
+      parts.push(hoverable(s, `<rect x="${n2(X(km) - 1.5)}" y="${y - 7}" width="3" height="14" rx="1.5" fill="${RING_INK}" />`));
+    } else {
+      // Dot radius by the moon's own radius, log scale: 10km → 1.5px, 100km → 2.5px, Luna → 4.4px.
+      const rm = radiusM(s.core?.radius);
+      const r = rm === null ? 2 : Math.min(5, Math.max(1.5, 1 + 1.5 * Math.log10(rm / 1e3 / 10)));
+      parts.push(hoverable(s, `<circle cx="${x}" cy="${y}" r="${n2(r)}" fill="${MOON_INK}" />`));
+    }
+  }
+  const inner = sats.reduce((a, b) => (a.km < b.km ? a : b));
+  const outer = sats.reduce((a, b) => (a.km > b.km ? a : b));
+  const label = (x) => orbitLabel(humaniseQuantity({ value: x.km, unit: "km" }));
+  parts.push(svgText(X(inner.km), y + 17, label(inner), 10, MUTED_INK));
+  if (outer !== inner) parts.push(svgText(X(outer.km), y + 17, label(outer), 10, MUTED_INK));
+  return `<svg class="moon-strip" viewBox="0 0 ${STRIP.w} ${STRIP.h}" role="img" aria-label="Satellites by orbit radius, log scale">${parts.join("")}</svg>`;
+}
+
+// `hasGlyph` is true for bodies drawn somewhere — stars, a star's direct children (the orrery) and a
+// planet's satellites (its moon strip) — whose record id then doubles as a link to that glyph.
 function renderNode(node, hasGlyph) {
   const title = bodyLabel(node);
   const orbitRadius = node.orbit?.radius ? quantity(node.orbit.radius) : "";
@@ -1208,7 +1268,21 @@ function renderNode(node, hasGlyph) {
     sections.push(section(humanize(k), renderValue(val)));
   }
 
-  const kids = (node.children || []).map((child) => renderNode(child, node.kind === "star")).join("");
+  const children = node.children || [];
+  const sats = children.filter(isSatellite);
+  const others = children.filter((c) => !isSatellite(c));
+  const kids = others.map((child) => renderNode(child, node.kind === "star")).join("");
+  // Satellites: the strip, then their records folded beneath a count.
+  let satellites = "";
+  if (sats.length) {
+    const summary = childSummary(node);
+    const rings = sats.length - summary.moons;
+    const count = `${summary.moons ? `${summary.moons} moon${summary.moons === 1 ? "" : "s"}` : ""}${summary.moons && rings ? " · " : ""}${rings ? `${rings} ring${rings === 1 ? "" : "s"}` : ""}`;
+    satellites = `${moonStripSvg(node)}
+      <details class="moons-wrap"><summary>${count}</summary>
+        <ul class="children">${sats.map((child) => renderNode(child, true)).join("")}</ul>
+      </details>`;
+  }
   return `<li class="node" data-id="${escapeHtml(node.id)}">
     <div class="node-head">
       ${portraitSvg(node)}
@@ -1220,6 +1294,7 @@ function renderNode(node, hasGlyph) {
       ${orbitRadius ? `<span class="node-orbit">${orbitRadius}</span>` : ""}
     </div>
     <div class="node-detail">${sections.join("")}</div>
+    ${satellites}
     ${kids ? `<ul class="children">${kids}</ul>` : ""}
   </li>`;
 }
@@ -1399,10 +1474,11 @@ function hoverCardHtml(node, isPrimary) {
     if (isQuantity(node.core?.luminosity)) add("Luminosity", unitHtml(node.core.luminosity.value, node.core.luminosity.unit));
     if (isQuantity(node.core?.temperature)) add("Temperature", unitHtml(node.core.temperature.value, node.core.temperature.unit));
     if (isQuantity(node.orbit?.radius)) add("Separation", orbitFact(node));
-  } else if (node.kind === "planet") {
-    kind = ["planet", tintName(planetTint(node).key)].filter(Boolean).join(" · ");
+  } else if (node.kind === "planet" || node.kind === "moon" || node.kind === "moonlet") {
+    kind = [node.kind, tintName(planetTint(node).key)].filter(Boolean).join(" · ");
     const rm = radiusM(node.core?.radius);
-    if (rm !== null) add("Radius", unitHtml(rm / EARTH_RADIUS_M, "R⊕"));
+    if (node.kind !== "planet") add("Radius", qtyHtml(node.core?.radius));
+    else if (rm !== null) add("Radius", unitHtml(rm / EARTH_RADIUS_M, "R⊕"));
     const g = node.core?.surfaceGravity;
     if (isQuantity(g) && g.unit === "m/s²") add("Gravity", unitHtml(g.value / G0, "g"));
     add("Temperature", tempFact(node));
@@ -1477,8 +1553,7 @@ function openNode(id) {
   if (!record) return;
   pinnedId = null;
   hideHoverCard();
-  const fold = els.rendered.querySelector("details.tree-wrap");
-  if (fold) fold.open = true;
+  for (let fold = record.closest("details"); fold; fold = fold.parentElement?.closest("details")) fold.open = true;
   // Scroll the record's head, not the record: a planet's record contains its moons' records and can
   // be screens tall, and centring that would land the reader among the moons.
   (record.querySelector(":scope > .node-head") ?? record).scrollIntoView({ behavior: "smooth", block: "center" });

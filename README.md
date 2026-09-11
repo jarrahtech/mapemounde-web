@@ -12,12 +12,15 @@ For the three system generators (2300 AD, BattleTech, Architect of Worlds) each 
 draws an **orrery**: a schematic map with the star at the left, one orbit per body,
 and glyphs whose size follows the body's radius and whose colour follows what it is —
 banded tan gas giants, and rocky worlds tinted from ice white through ocean blue-green
-to hothouse yellow. Rings, asteroid belts, moon counts and each book's own habitability
-flag are drawn too, and a legend beneath explains the marks in use. Hovering a glyph
-(or tapping it) shows a card of headline facts with a link to the body's full record in
-the folded **System detail** tree below; hovering a record lights its glyph. The raw
-JSON is one fold further down. The Traveller page draws the Classic Traveller system hex
-instead, with a name field and an SVG download.
+to hothouse yellow. Rings, asteroid belts, moon counts, each book's own habitability
+flag and, where the book gives one, its habitable zone are drawn too. A strip above the
+map counts what the picture cannot show at a glance, and an **ⓘ Legend** at the bottom
+right explains the marks in use. Hovering a glyph (or tapping it) shows a card of
+headline facts with a link to the body's full record in the folded **System detail**
+tree below; each record's `#id ↑` links back to its glyph. Records show atmosphere
+composition as a stacked bar and a planet's moons as a log-scale strip, with the moon
+records folded beneath. The raw JSON is one fold further down. The Traveller page draws
+the Classic Traveller system hex instead, with a name field and an SVG download.
 
 ## Run it
 

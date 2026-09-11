@@ -1,8 +1,9 @@
 # TODO — making the system pages readable at a glance
 
 Design backlog for the three tree pages (`ad2300`, `btech`, `aow`). The traveller page has its
-own hex and is out of scope here. Ticked items are done (Phase 1 complete, Phase 2 under way as
-of 2026-09-11); effort tags are estimates:
+own hex and is out of scope here. Ticked items are done; as of 2026-09-11 Phase 1 and most of
+Phase 2 are complete, and what remains either waits on the API, needs a decision (two
+"revisit" items), or is Phase 3–4 work. Effort tags are estimates:
 **[S]** an hour or two inside one function · **[M]** a new SVG component or layout change, about
 half a day · **[L]** a new interaction model or work that spans this repo and `mapemounde-api`.
 
@@ -165,13 +166,11 @@ Small, mostly no API change. Together these turn "seven identical discs" into a 
 - [x] **Atmosphere composition as a stacked bar.** Detected by the shared `composition` key;
       normalised to the total (aow's values are amounts summing to `totalMass`, shown beside
       each share), one colour per gas across both books' spellings. Also on the hover card. [S]
-- [ ] **Moon system as a mini strip.** For a planet with many moons, a compact log-radius
-      strip of dots with the moon nodes folded beneath it. btech's fold-out is currently
-      dominated by moon records (a 31-moon planet is ~30 screens tall). [M]
-- ~~**Star card.** The primary drawn to scale against a Sun outline with its headline
-      figures.~~ **Dropped** (built, then removed 2026-09-11): it added nothing over hovering the
-      star in the orrery, which shows the same figures. If a Sun-scale comparison is ever wanted,
-      it belongs in the star's hover card.
+- [x] **Moon system as a mini strip.** A planet's satellites on a log-radius axis above their
+      records, which fold beneath a count; dots sized by moon radius, rings as marks, decade
+      ticks, innermost and outermost radii printed. Dots are hover targets: the hover card
+      (moons now get the planet's facts), the record→glyph highlight and the id link all work.
+      Dots stay grey until the moon-colour item. [M]
 - [x] **Summary strip instead of the developer meta line.** Chips above the map, trimmed to
       what the picture cannot answer: planets by book class with their tint, habitable count,
       moon total, system figures that are not form parameters (aow age / metallicity) and the
