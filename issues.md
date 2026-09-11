@@ -29,3 +29,4 @@
 * AoW seed 4 has a D7 white-dwarf primary with six gas giants between 0.02 and
   0.47 au, and seed 43 a D4 primary with planets from 0.017 au. Planets that close to a star that has been
   through its giant phase may be worth a look against the book.
+* planets in btech lifezones seem too hot

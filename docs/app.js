@@ -628,6 +628,64 @@ function starRadiusPx(star, primary) {
   return ORRERY.rootStar * Math.min(STAR_SCALE.max, Math.max(STAR_SCALE.min, scale));
 }
 
+// The book's habitable zone for a star, in au, where the book gives one: btech's `lifezone`
+// (inner/outer, in metres). Nothing is derived from luminosity — a zone the book never specified
+// would be presented as the book's. Null for the other generators until their APIs expose one.
+function starZoneAu(star) {
+  const z = star.lifezone;
+  const au = (q) => (isQuantity(q) ? humaniseQuantity(q) : null);
+  const inner = au(z?.inner);
+  const outer = au(z?.outer);
+  if (!inner || !outer || inner.unit !== "au" || outer.unit !== "au" || !(outer.value > inner.value)) {
+    // humaniseQuantity only reaches au from 0.1 au; a tighter zone comes back in km — convert here.
+    const toAu = (q) => (q ? (q.unit === "au" ? q.value : q.unit === "km" ? (q.value * 1e3) / AU_M : q.value / AU_M) : null);
+    const i = toAu(inner), o = toAu(outer);
+    return i !== null && o !== null && o > i ? { inner: i, outer: o } : null;
+  }
+  return { inner: inner.value, outer: outer.value };
+}
+
+const orbitAu = (node) => {
+  const q = node.orbit?.radius;
+  if (!isQuantity(q)) return null;
+  return q.unit === "au" ? q.value : q.unit === "km" ? (q.value * 1e3) / AU_M : q.unit === "m" ? q.value / AU_M : null;
+};
+
+// Where the zone falls on a row whose orbits are spaced by rank: the zone's real radii are mapped
+// onto drawn rx by interpolating between neighbouring bodies' (real radius, rx) — monotone, so every
+// body stays on the correct side of the band's edges. Each chunk (row or strip) gets its own span,
+// clamped to what it shows, with the neighbouring chunks' edge bodies as end points so a zone that
+// crosses a split continues seamlessly. Null when the star has no zone or none of it falls here.
+function zoneSpan(star, chunks, ci, lead, starR) {
+  const zone = starZoneAu(star);
+  if (!zone) return null;
+  const chunk = chunks[ci];
+  const pts = []; // [realAu, rx], ascending in both
+  const prev = ci > 0 ? chunks[ci - 1][chunks[ci - 1].length - 1] : null;
+  const next = ci < chunks.length - 1 ? chunks[ci + 1][0] : null;
+  if (prev) pts.push([orbitAu(prev), lead - ORRERY.step]);
+  else pts.push([0, starR]);
+  chunk.forEach((node, i) => pts.push([orbitAu(node), lead + i * ORRERY.step]));
+  if (next) pts.push([orbitAu(next), lead + chunk.length * ORRERY.step]);
+  const valid = pts.filter(([au]) => au !== null);
+  if (valid.length < 2) return null;
+  const toRx = (au) => {
+    if (au <= valid[0][0]) return valid[0][1];
+    for (let i = 1; i < valid.length; i++) {
+      const [a0, x0] = valid[i - 1];
+      const [a1, x1] = valid[i];
+      if (au <= a1) return x0 + ((au - a0) / (a1 - a0)) * (x1 - x0);
+    }
+    // Beyond the outermost known radius: the band cannot be placed, so it runs to the row's edge.
+    return Infinity;
+  };
+  const lo = ci > 0 ? lead - ORRERY.step / 2 : starR;
+  const hi = lead + (chunk.length - 1) * ORRERY.step + ORRERY.step / 2;
+  const rxIn = Math.max(lo, Math.min(hi, toRx(zone.inner)));
+  const rxOut = Math.max(lo, Math.min(hi, toRx(zone.outer)));
+  return rxOut - rxIn > 1 ? { rxIn, rxOut } : null;
+}
+
 // Glyph radius for any body in a star's row. Belts ignore it (they draw their own dots).
 function bodyRadiusPx(node, primary) {
   if (node.kind === "star") return starRadiusPx(node, primary);
@@ -708,9 +766,10 @@ function layoutOrrery(root, available = 0) {
       // true radius is printed under every body. `from` is where the previous row ran out, for the
       // connector.
       const row = {
-        node: star, x: originX, y: originY, r: starR, bodies,
+        node: star, x: originX, y: originY, r: starR, bodies, maxRx,
         link: ci === 0 ? link : null,
         from: ci > 0 ? { x: prevRow.x + prevRow.bodies[prevRow.bodies.length - 1].rx + ORRERY.step / 2, y: prevRow.y } : null,
+        zone: zoneSpan(star, chunks, ci, lead, starR),
       };
       rows.push(row);
       prevRow = row;
@@ -842,6 +901,23 @@ function bodySvg(row, b) {
   return parts.join("");
 }
 
+// The habitable zone as a translucent band between two orbits: an evenodd annulus of two ellipses
+// in a full row, and the region between two orbit arcs in a strip. Drawn first, under the orbit
+// lines and glyphs. The book's figures put it here; the client only maps them onto the rank scale.
+function zoneSvg(row) {
+  const { rxIn, rxOut } = row.zone;
+  const ry = (rx) => ORRERY.maxRy * Math.sqrt(rx / row.maxRx);
+  const x = row.x, y = row.y;
+  const style = `fill="${HABITABLE_INK}" fill-opacity="0.13" stroke="${HABITABLE_INK}" stroke-opacity="0.35" stroke-width="1"`;
+  if (row.from) {
+    const a = 0.4;
+    const pt = (rx, sign) => `${n2(x + rx * Math.cos(a))},${n2(y + sign * ry(rx) * Math.sin(a))}`;
+    return `<path d="M${pt(rxIn, -1)} A${n2(rxIn)},${n2(ry(rxIn))} 0 0 1 ${pt(rxIn, 1)} L${pt(rxOut, 1)} A${n2(rxOut)},${n2(ry(rxOut))} 0 0 0 ${pt(rxOut, -1)} Z" ${style} />`;
+  }
+  const ellipse = (rx) => `M${n2(x - rx)},${n2(y)} A${n2(rx)},${n2(ry(rx))} 0 1 0 ${n2(x + rx)},${n2(y)} A${n2(rx)},${n2(ry(rx))} 0 1 0 ${n2(x - rx)},${n2(y)}`;
+  return `<path d="${ellipse(rxOut)} ${ellipse(rxIn)}" fill-rule="evenodd" ${style} />`;
+}
+
 // The piece of a body's orbit ellipse either side of the baseline crossing where the body sits.
 function orbitArc(row, b) {
   const a = 0.4; // radians either side of the crossing
@@ -867,6 +943,7 @@ function orreryRowSvg(row) {
     const mid = sy + (ey - sy) / 2;
     parts.push(`<path d="M${n2(sx)},${n2(sy)} C${n2(sx)},${n2(mid)} ${n2(ex)},${n2(mid)} ${n2(ex)},${n2(ey)}" fill="none" stroke="currentColor" stroke-opacity="0.3" stroke-dasharray="4 4" />`);
   }
+  if (row.zone) parts.push(zoneSvg(row));
   if (row.from) {
     // A continuation strip: a dashed connector from where the previous row ran out down to the
     // strip's baseline, in the tether's style, then a short arc of each orbit through its body —
@@ -936,6 +1013,8 @@ function renderOrrerySvg(root, available = 0) {
 // generator: the habitability dot is named in each book's own terms rather than as a shared notion
 // of "habitable".
 
+const ZONE_NAME = { btech: "life zone" }; // the book's own term for its habitable zone
+
 const HABITABLE_FLAG_NAME = {
   ad2300: "human-breathable oxygen",
   btech: "habitable",
@@ -949,6 +1028,7 @@ const SWATCH = 22; // rendered size; drawn in a 30-unit box so glyph helpers kee
 function usedMarks(root) {
   const marks = new Set();
   const visit = (star) => {
+    if (starZoneAu(star)) marks.add("zone");
     for (const node of star.children || []) {
       if (node.kind === "star") {
         if ((node.children || []).length) visit(node);
@@ -997,6 +1077,10 @@ function legendHtml(root) {
   }
   if (used.has("ocean")) add(swatch(disc(c, c, 7, ROCK_TINTS.find((b) => b.wet).wet)), "ocean");
   if (used.has("unknown")) add(swatch(disc(c, c, 7, MUTED_INK)), "unknown");
+  if (used.has("zone")) {
+    const band = `<path d="M3,${c} A12,7 0 1 0 27,${c} A12,7 0 1 0 3,${c} M8,${c} A7,4 0 1 0 22,${c} A7,4 0 1 0 8,${c}" fill-rule="evenodd" fill="${HABITABLE_INK}" fill-opacity="0.25" stroke="${HABITABLE_INK}" stroke-opacity="0.6" stroke-width="1" />`;
+    add(swatch(band), `${ZONE_NAME[GENERATOR] || "habitable zone"}, the book's own`);
+  }
   if (used.has("ring")) {
     const ring = ringPaths(c, c, 6);
     add(swatch(ring.far + disc(c, c, 6, rock) + ring.near), "ring");
