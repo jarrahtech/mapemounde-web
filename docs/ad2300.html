@@ -18,9 +18,9 @@
 
     <main>
       <form id="form">
-        <div class="row">
+        <div class="row" data-dev-only>
           <label for="apiBase">API base</label>
-          <!-- Value is set by apiBase.js (?api= → saved → default); remembered across visits and pages. -->
+          <!-- Dev only: value is set by apiBase.js (?api= → saved → default) and remembered across visits and pages. In prod it is fixed and this row is hidden. -->
           <input id="apiBase" type="text" placeholder="http://localhost:8080" spellcheck="false" />
         </div>
 

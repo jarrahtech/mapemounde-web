@@ -47,11 +47,12 @@
     input.addEventListener("change", () => saveApiBase(input.value.trim()));
   } else {
     input.value = PROD_API_BASE;
-    // Hide the field's row — or the whole form when the field is all it holds (the hub). Set inline
-    // because .row and form declare a display of their own, which the hidden attribute cannot beat.
-    const row = input.closest(".row");
-    const form = input.closest("form");
-    const target = form.querySelectorAll(".row").length > 1 ? row : form;
-    target.style.display = "none";
+    // readOnly is also how app.js tells the base is locked (it keeps ?api= out of permalinks).
+    input.readOnly = true;
+    // Hide whatever the page marks data-dev-only around the field: its row, or the whole form on the
+    // hub. Set inline because .row and form declare a display of their own, which the hidden
+    // attribute cannot beat. Optional, so a stale cached page without the marker does not throw.
+    const devOnly = input.closest("[data-dev-only]");
+    if (devOnly) devOnly.style.display = "none";
   }
 })();

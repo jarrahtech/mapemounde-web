@@ -68,12 +68,13 @@ function readUrlParams() {
 
 // Mirror the system just generated into the page URL, so it is a permalink and Back/Forward step
 // through earlier systems. The first system *replaces* the seedless entry rather than stacking on
-// it, so Back never lands on an empty page. A ?api= the visitor arrived with is carried along, so a
-// shared link keeps pointing at the same server; nothing else from the old query survives.
+// it, so Back never lands on an empty page. In dev a ?api= the visitor arrived with is carried
+// along, so a shared link keeps pointing at the same server; in prod apiBase.js locks the base (the
+// field is read-only) and ignores ?api=, so it is dropped. Nothing else from the old query survives.
 function pushUrlParams() {
   const current = new URLSearchParams(location.search);
   const next = formParams();
-  if (current.has("api")) next.set("api", current.get("api"));
+  if (current.has("api") && !els.apiBase.readOnly) next.set("api", current.get("api"));
   const search = `?${next}`;
   if (search === location.search) return;
   history[current.has("seed") ? "pushState" : "replaceState"](null, "", search);
