@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Mapemounde — Architect of Worlds: differences from the book</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header>
+      <p class="crumb"><a href="aow.html">← Architect of Worlds generator</a></p>
+      <h1>Architect of Worlds: differences from the book</h1>
+      <p class="subtitle">This page assumes you already know the book. It lists only where the generator departs from it.</p>
+    </header>
+
+    <main>
+      <section class="card about">
+        <dl class="facts">
+          <dt>Book</dt>
+          <dd><a href="https://www.adastragames.com/products/p/architect-of-worlds-pdf" target="_blank" rel="noopener"><cite>Architect of Worlds: Comprehensive World Design for Interstellar Fiction</cite></a>, Jon F. Zeigler, Ad Astra Games, © 2024, v1.07 (22 April 2026).</dd>
+          <dt>Rules implemented</dt>
+          <dd>The design sequence, Steps One to Thirty-One</dd>
+          <dt>Compared against</dt>
+          <dd>mapemounde library 0.5.0, as at 8 October 2026</dd>
+        </dl>
+      </section>
+
+      <section class="card about">
+        <h2>Stars (Steps 1 to 8)</h2>
+        <ul>
+          <li>Primary and companion masses are always sampled uniformly between the rolled table entry and the next entry up. The book makes this variation optional and centres it on the rolled entry.</li>
+          <li>Spectral types come from the current Mamajek temperature table, not the book’s Spectral Type Table, so the decimal subclass can differ by one or two (5,450 K is G9 here, G7 in the book).</li>
+          <li>Brown dwarf radius is varied by ±5% around the book’s fixed 70,000 km.</li>
+          <li>White dwarfs are given a numeric subclass, D0 to D9, from their temperature. The book uses a bare “D”.</li>
+          <li>Star radius is calculated from luminosity and temperature with a solar temperature of 5,772 K, not the book’s rounded coefficient. Radii come out about 0.04% smaller.</li>
+          <li>Roche lobe radii use the Eggleton approximation, not the book’s simplified formula.</li>
+        </ul>
+      </section>
+
+      <section class="card about">
+        <h2>Planetary systems (Steps 9 to 17)</h2>
+        <ul>
+          <li>Where companions are nested, the “nearest companion” that truncates a star’s disk is the nearest individual star, including the members of a close pair.</li>
+          <li>The distance to that companion is taken at its closest approach (periapsis). The book does not say which distance to use for an eccentric orbit.</li>
+          <li>Oligarchic collision and leftover oligarch masses are varied by ±5%. The book gives them no variation.</li>
+          <li>In a two-planet system the planets are never closer than the 4:3 resonance spacing (a ratio of 1.211). If that would put the outer planet in the forbidden zone, it is removed. The book says only to “adjust” the orbit.</li>
+          <li>Failed cores generate satellites as terrestrial planets do (one large moon or moonlets), not as gas giants do.</li>
+          <li>Gas giant moonlets are not generated. The book describes them but gives no procedure.</li>
+        </ul>
+      </section>
+
+      <section class="card about">
+        <h2>Worlds (Steps 18 to 31)</h2>
+        <ul>
+          <li>Orbital period, blackbody temperature, tidal force and atmospheric scale height are calculated from the exact physics, not the book’s single-constant formulas. Values shift slightly (blackbody temperature by about 1 K, scale height by about 1%).</li>
+          <li>A brown dwarf primary rules out photosynthesis only if it is spectral class L, T or Y, as page 131 says. Step 29 read alone would rule it out for every brown dwarf.</li>
+        </ul>
+      </section>
+
+      <section class="card about">
+        <h2>Earthlike mode</h2>
+        <ul>
+          <li>When an Earthlike world is requested, the whole star system is rolled again, up to 20 times, until the primary is a main sequence star or a subgiant.</li>
+        </ul>
+      </section>
+
+      <section class="card about">
+        <h2>Special cases in use</h2>
+        <p>These rules from the <em>Special Cases in Worldbuilding</em> chapter change the basic sequence. No other special case from that chapter is applied.</p>
+        <ul>
+          <li><strong>Brown dwarfs (p. 131):</strong> a brown dwarf’s planetary system is laid out from an initial luminosity of 0.00075 solar. Current conditions on its worlds use its current luminosity.</li>
+          <li><strong>Subgiant and giant stars (p. 131):</strong> any planet or belt whose minimum distance from the star is less than the star’s current radius is removed. A surviving planet whose inner neighbour was removed loses its resonance.</li>
+          <li><strong>White dwarfs (pp. 131–132):</strong> Steps 9 to 14 run on the star’s original mass and luminosity. Planets inside 1.0 AU and all planetoid belts are then removed, and the survivors are migrated inward and respaced with the Step 13 procedure. Steps 15 onward use the white dwarf as it is now.</li>
+          <li><strong>White dwarfs, readings of the rule:</strong> the 1.0 AU test uses the Step 13 orbital radius, since eccentricity is not yet rolled. Rocky or icy moons and initial water are decided from a world’s migrated orbit, not the orbit it formed in.</li>
+        </ul>
+      </section>
+    </main>
+  </body>
+</html>

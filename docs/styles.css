@@ -694,3 +694,59 @@ pre {
   overflow-x: auto;
   font-size: 0.82rem;
 }
+
+/* Book reference under a generator page's subtitle, and the "differences from the book" pages. */
+.source {
+  margin: 0.4rem 0 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.source a,
+.about a {
+  color: var(--accent);
+}
+
+.about h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.1rem;
+}
+
+.about p {
+  margin: 0 0 0.5rem;
+}
+
+.about ul {
+  margin: 0;
+  padding-left: 1.2rem;
+}
+
+.about li + li {
+  margin-top: 0.4rem;
+}
+
+.facts {
+  margin: 0;
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.4rem 1rem;
+}
+
+.facts dt {
+  color: var(--muted);
+}
+
+.facts dd {
+  margin: 0;
+}
+
+@media (max-width: 600px) {
+  .facts {
+    grid-template-columns: 1fr;
+    gap: 0.1rem;
+  }
+
+  .facts dd {
+    margin-bottom: 0.5rem;
+  }
+}

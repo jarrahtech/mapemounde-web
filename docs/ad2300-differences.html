@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Mapemounde — 2300 AD: differences from the book</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header>
+      <p class="crumb"><a href="ad2300.html">← 2300 AD generator</a></p>
+      <h1>2300 AD: differences from the book</h1>
+      <p class="subtitle">This page assumes you already know the book. It lists only where the generator departs from it.</p>
+    </header>
+
+    <main>
+      <section class="card about">
+        <dl class="facts">
+          <dt>Book</dt>
+          <dd><a href="https://www.drivethrurpg.com/en/product/413/2300-ad-man-s-battle-for-the-stars" target="_blank" rel="noopener"><cite>2300 AD: Man’s Battle for the Stars</cite></a>, Marc W. Miller, Timothy B. Brown, Lester W. Smith and Frank Chadwick, Game Designers’ Workshop, 1988. No version or printing number is given; the copy used includes the errata sheet of 19 October 1988.</dd>
+          <dt>Rules implemented</dt>
+          <dd>The <em>World Generation</em> chapter of the <em>Director’s Guide</em></dd>
+          <dt>Compared against</dt>
+          <dd>mapemounde library 0.5.0, as at 8 October 2026</dd>
+        </dl>
+      </section>
+
+      <section class="card about">
+        <h2>Stars</h2>
+        <ul>
+          <li>Stars are generated randomly: the number of stars, their spectral type and size, and the separation of companions. None of this is in the book, which has the referee choose a star from the Near Star List.</li>
+        </ul>
+      </section>
+
+      <section class="card about">
+        <h2>Orbits</h2>
+        <ul>
+          <li>Empty orbits are never rolled, so generation does not stop after two consecutive empty orbits. Instead about 10% of orbits are removed at random and one in six of those becomes an asteroid belt.</li>
+          <li>That removal happens after orbits are checked for stability and vaporisation, not before.</li>
+          <li>An orbit is vaporised if its blackbody temperature is 2,000 K or more, calculated directly, not read from the Untenable Orbits table.</li>
+          <li>The vaporisation and inside-the-star checks count every star in the system, not only the star being orbited.</li>
+          <li>An orbit beyond three times the distance to a companion is stable only if the companion is lighter than the star being orbited.</li>
+          <li>Around O, B and A stars, chunks that roll the same orbital radius are merged into one.</li>
+        </ul>
+      </section>
+
+      <section class="card about">
+        <h2>Worlds</h2>
+        <ul>
+          <li>Mass and surface gravity are calculated from the world’s diameter and density, not read from the World Mass and Gravity tables.</li>
+          <li>Atmospheric pressure equals surface gravity in Gs (the condensed table).</li>
+          <li>A world that snowballs is given a new Icy density reduced by 10%. The book leaves its density unchanged.</li>
+          <li>Where the Average Temperatures table gives a range, a single class is used (Cold–Hot becomes Hot).</li>
+          <li>Ocean and ice sheet coverage is 2D6 × 10%, capped at 100%, so it is never below 20%. The book uses (2D6 − 2) × 10%.</li>
+          <li>The atmosphere type the book calls “Standard” is named “Moderate”.</li>
+        </ul>
+      </section>
+
+      <section class="card about">
+        <h2>Satellites</h2>
+        <ul>
+          <li>A satellite’s radius is capped at 0.8 of its world’s radius, in place of the book’s repeated halving. The cap also applies to chunk satellites.</li>
+          <li>A satellite over 200 km in diameter that rolls an orbit below 3 is placed at 3. The book rerolls.</li>
+          <li>A satellite with a size roll below 0 is always a ring, placed in a close orbit.</li>
+          <li>For satellites whose size falls between or outside the rows of the Minimum Molecular Weight Retained table, the nearest row and column are used, a “vac” entry is read as 120, and a world under 500 km in diameter is a vacuum.</li>
+        </ul>
+      </section>
+
+      <section class="card about">
+        <h2>Not implemented</h2>
+        <ul>
+          <li>Colony and social data.</li>
+        </ul>
+      </section>
+    </main>
+  </body>
+</html>
