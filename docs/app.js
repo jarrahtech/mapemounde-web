@@ -1103,7 +1103,7 @@ function legendHtml(root) {
     </details>`;
 }
 
-// The legend is a popover off an "ⓘ Legend" pill, since the hover card now explains any single body
+// The legend folds out under an "ⓘ Legend" pill (in the page flow, so it never covers the map), since the hover card now explains any single body
 // and the legend is only needed for the marks a hover cannot (a GM scanning for green dots).
 // Hovering the pill shows it and leaving hides it; a click *pins* it open, and only the pinned
 // state is remembered (open on the first visit, like the API base). The orrery card is rebuilt on
@@ -1672,7 +1672,7 @@ async function generate({ updateUrl = true } = {}) {
     els.raw.textContent = JSON.stringify(body, null, 2);
 
     if (!response.ok) {
-      setStatus(`HTTP ${response.status}: ${body.error ?? "request failed"}`, true);
+      setStatus(`HTTP ${response.status}: ${body.message ?? "request failed"}`, true);
       els.rendered.innerHTML = "";
       els.result.hidden = false;
       return;

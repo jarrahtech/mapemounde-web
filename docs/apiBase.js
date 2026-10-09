@@ -7,7 +7,7 @@
 // seeds the #apiBase field from it, and remembers edits across visits and pages via localStorage.
 //
 // In prod (any other host) the base is locked to PROD_API_BASE and the field is hidden: ?api= and
-// any saved value are ignored, so a shared link cannot point a visitor's page at another server.
+// any saved value are ignored (?api= is also removed from the address bar), so a shared link cannot point a visitor's page at another server.
 // The field stays in the DOM because app.js reads the base from it.
 //
 // Wrapped so it declares no globals: app.js is a separate classic script, and a browser holding a
@@ -49,6 +49,13 @@
     input.value = PROD_API_BASE;
     // readOnly is also how app.js tells the base is locked (it keeps ?api= out of permalinks).
     input.readOnly = true;
+    // ?api= is dev only: take it out of the address bar so it is not copied into shared links.
+    const params = new URLSearchParams(location.search);
+    if (params.has("api")) {
+      params.delete("api");
+      const search = params.toString();
+      history.replaceState(null, "", location.pathname + (search ? `?${search}` : "") + location.hash);
+    }
     // Hide whatever the page marks data-dev-only around the field: its row, or the whole form on the
     // hub. Set inline because .row and form declare a display of their own, which the hidden
     // attribute cannot beat. Optional, so a stale cached page without the marker does not throw.

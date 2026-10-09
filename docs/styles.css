@@ -131,6 +131,22 @@ button:hover {
   color: var(--error);
 }
 
+@media (max-width: 600px) {
+  /* Let the fields shrink into the card, and drop the status under the buttons. */
+  input[type="text"],
+  select {
+    min-width: 0;
+  }
+
+  .actions {
+    flex-wrap: wrap;
+  }
+
+  .status {
+    flex-basis: 100%;
+  }
+}
+
 section#result {
   margin-top: 1.5rem;
 }
@@ -275,6 +291,12 @@ section#result {
   margin-left: auto;
 }
 
+@media (max-width: 600px) {
+  .hex-controls input {
+    min-width: 0;
+  }
+}
+
 /* System orrery: a schematic map of the generated system, drawn as inline SVG. It scales down to
    the card's width (app.js splits wide systems into rows so the scale never drops below 0.72); the
    overflow-x is a last resort that should not trigger, kept so the page body can never scroll
@@ -293,12 +315,13 @@ section#result {
   color: var(--text);
 }
 
-/* Legend: an "ⓘ Legend" pill at the bottom right of the orrery card that floats the legend (only
-   the marks this system uses, in the orrery's own colours) as a panel above itself. */
+/* Legend: an "ⓘ Legend" pill at the bottom right of the orrery card that unfolds the legend (only
+   the marks this system uses, in the orrery's own colours) as a panel beneath itself. The panel is
+   in the page flow, not floated, so an open legend never covers the map. */
 .legend-wrap {
-  position: relative;
   display: flex;
-  justify-content: flex-end;
+  flex-direction: column;
+  align-items: flex-end;
   margin: 0.3rem 0.25rem 0;
 }
 
@@ -323,16 +346,12 @@ section#result {
 }
 
 .legend-panel {
-  position: absolute;
-  right: 0;
-  bottom: calc(100% + 6px);
-  z-index: 4;
+  margin-top: 6px;
   max-width: 100%;
   padding: 0.45rem 0.75rem 0.4rem;
   background: var(--panel-2);
   border: 1px solid var(--border);
   border-radius: 8px;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
 }
 
 .legend {
