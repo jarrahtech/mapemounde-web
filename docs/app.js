@@ -1303,6 +1303,8 @@ function portraitSvg(node, scale = 1) {
   const cx = 20;
   const cy = 13;
   let inner;
+  let box = `0 0 ${w} 26`;
+  let size = [32 * scale, 21 * scale];
   if (node.kind === "star") {
     const ids = `portrait${node.id}`;
     inner = `<defs>${starTintDefs([starTint(node)], ids)}</defs>${starGlyph(cx, cy, 8, starTint(node), ids)}`;
@@ -1310,11 +1312,25 @@ function portraitSvg(node, scale = 1) {
     const r = 5 + (4 * (planetRadiusPx(node) - PLANET_PX.min)) / (PLANET_PX.max - PLANET_PX.min);
     const tint = planetTint(node);
     const disc = `<circle cx="${cx}" cy="${cy}" r="${n2(r)}" fill="${tint.fill}" />` + (tint.band ? giantBands(cx, cy, r, tint.band) : "");
-    if (childSummary(node).ring) {
+    const ringed = childSummary(node).ring;
+    if (ringed) {
       const ring = ringPaths(cx, cy, r);
       inner = ring.far + disc + ring.near;
     } else {
       inner = disc;
+    }
+    // At size (the world panel) the box is cut to what is drawn, so a plain disc does not sit in
+    // the space a ringed giant needs, and the glyph starts at the box's left edge, under the badge.
+    // Its width is the widest a glyph of that sort can be — one for discs, one for ringed worlds —
+    // so the gauges beside it line up from world to world. The ring's half-height allows for its
+    // 18° tilt.
+    if (scale > 1) {
+      const rx = Math.max(2 * r, 14);
+      const hw = (ringed ? rx : r) + 1.5;
+      const hh = (ringed ? Math.max(r, rx * 0.45) : r) + 1.5;
+      const boxW = 2 * ((ringed ? 18 : 9) + 1.5); // the 9-unit cap on r above, and its ring
+      box = `${n2(cx - hw)} ${n2(cy - hh)} ${boxW} ${n2(2 * hh)}`;
+      size = [boxW * 0.8 * scale, 2 * hh * 0.8 * scale];
     }
   } else if (node.kind === "asteroidBelt") {
     inner = beltGlyph({ x: cx - 10, y: cy }, { rx: 10, ry: 30 });
@@ -1326,7 +1342,7 @@ function portraitSvg(node, scale = 1) {
   } else {
     inner = `<circle cx="${cx}" cy="${cy}" r="${GLYPH_DEFAULT.r * 0.6}" fill="${GLYPH_DEFAULT.fill}" />`;
   }
-  return `<svg class="portrait" viewBox="0 0 ${w} 26" width="${32 * scale}" height="${21 * scale}" aria-hidden="true">${inner}</svg>`;
+  return `<svg class="portrait" viewBox="${box}" width="${n2(size[0])}" height="${n2(size[1])}" aria-hidden="true">${inner}</svg>`;
 }
 
 // --- moon strip -------------------------------------------------------------------------------
@@ -1401,6 +1417,18 @@ const GAUGE = { w: 180, h: 24, x0: 5, x1: 175, y: 16 };
 const ACCENT_INK = "#6ea8fe"; // mirrors --accent in styles.css
 const TEMP_GAUGE_MAX_K = 800;
 
+// aow's life stages in the book's own step order (Step 29); a stage is present only once it has
+// occurred, so the last one present is the furthest the world has got.
+const LIFE_STAGES = [
+  ["deepAbiogenesis", "Deep abiogenesis"],
+  ["surfaceAbiogenesis", "Surface abiogenesis"],
+  ["multicellular", "Multicellular life"],
+  ["photosynthesis", "Photosynthesis"],
+  ["oxygenCatastrophe", "Oxygen Catastrophe"],
+  ["animal", "Animal life"],
+  ["preSapient", "Pre-sapient life"],
+];
+
 const logFrac = (v, lo, hi) => (v > 0 ? Math.log10(v / lo) / Math.log10(hi / lo) : 0);
 
 // `frac` is 0–1 along the track; `ticks` are [frac, label] reference marks; `fill` draws a bar
@@ -1448,7 +1476,36 @@ function worldPanelHtml(node) {
   const gases = node.planet?.habitability?.composition ?? node.world?.atmosphere?.composition;
   if (isComposition(gases)) rows.push(`<dt>Composition</dt><dd class="wide">${compositionHtml(gases, false)}</dd>`);
   const water = waterFraction(node);
-  if (water !== null) add("Water", gaugeSvg(water, [], ROCK_TINTS.find((b) => b.wet).wet), `${Math.round(water * 100)}% cover`);
+  if (water !== null) {
+    const prevalence = node.world?.hydrosphere?.waterPrevalence;
+    add("Water", gaugeSvg(water, [], ROCK_TINTS.find((b) => b.wet).wet),
+      `${Math.round(water * 100)}% cover${prevalence ? ` · ${escapeHtml(humanize(prevalence))}` : ""}`);
+  }
+  // The depth only aow gives a world (`world.rotation`, `.geophysics`, `.biosphere`): words, not
+  // gauges, in the book's own terms.
+  const wide = (label, html) => rows.push(`<dt>${label}</dt><dd class="wide">${html}</dd>`);
+  const spin = node.world?.rotation?.spin;
+  if (spin) {
+    const day = node.world.rotation.localDay ?? spin.period;
+    const state =
+      spin.state === "LockedTo" ? "Tidally locked"
+      : spin.state === "Free" && isQuantity(day) ? `Day ${qtyHtml(day)}`
+      : escapeHtml(humanize(spin.state));
+    const tilt = typeof spin.obliquity === "number" ? ` · tilt ${escapeHtml(sig3(spin.obliquity))}°` : "";
+    wide("Rotation", state + tilt);
+  }
+  const geo = node.world?.geophysics;
+  if (geo?.lithosphere) {
+    const tectonics = geo.plateTectonics ? ` · ${escapeHtml(humanize(geo.plateTectonics).toLowerCase())} tectonics` : "";
+    const resurfacing = geo.episodicResurfacing === true ? ` <span class="warn">⚠ episodic resurfacing</span>` : "";
+    wide("Geology", escapeHtml(humanize(geo.lithosphere)) + tectonics + resurfacing);
+  }
+  if (geo?.magneticField) wide("Magnetic field", escapeHtml(humanize(geo.magneticField)));
+  const bio = node.world?.biosphere;
+  if (bio) {
+    const stage = LIFE_STAGES.filter(([key]) => isQuantity(bio[key])).pop();
+    wide("Life", stage ? `${stage[1]} <span class="unit">at ${qtyHtml(bio[stage[0]])}</span>` : "None");
+  }
   if (habitableFlag(node)) {
     rows.push(`<dt>Habitable</dt><dd class="wide"><span class="habitable-dot"></span>yes (${escapeHtml(HABITABLE_FLAG_NAME[GENERATOR] || "the book's flag")})</dd>`);
   }

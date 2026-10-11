@@ -216,11 +216,31 @@ Small, mostly no API change. Together these turn "seven identical discs" into a 
       ticked), temperature (0 and 100 °C ticked) and pressure (1 atm ticked), the atmosphere bar,
       water cover and the book's habitability flag, with the moon strip and the folds (moons,
       "All data" for the full grids) in the same column. No new conversions: the figures are
-      the hover card's. The orbit radius moved beside the kind badge on every record. Still to
-      do: surface aow's depth (climate, geophysics, biosphere), which is only under "All data";
-      tighten the portrait's box. [L]
-- [ ] **Batch roll and pick.** Roll N seeds, show thumbnails, filter by "has a habitable
-      world / gas giant / belt / companion". Directly serves the GM loop. [M–L]
+      the hover card's. The orbit radius moved beside the kind badge on every record. aow worlds add
+      their own depth as words: water prevalence beside the water bar, rotation (tidally locked
+      or day length, with axial tilt), geology (lithosphere and tectonics, with a warning mark
+      for episodic resurfacing), magnetic field, and the furthest life stage reached. [L]
+- [ ] **Batch roll and pick.** Roll N seeds, show thumbnails, filter by "has a habitable world /
+      gas giant / belt / companion". Directly serves the GM loop. [M–L]
+      Notes (2026-10-11):
+      - *A separate page per generator*, linked from that generator's page ("Roll a batch →"
+        near Random), not a mode on the system page: the system page stays uncluttered and its
+        address keeps naming one system. Three more near-identical HTML files; traveller left
+        out at first, having no orrery to thumbnail.
+      - The batch page carries the generator's own options, a batch size, the filters and a
+        grid of cards: a mini-orrery, the seed and the summary counts. A card opens the
+        ordinary generator page at that system's permalink; Back returns to the batch.
+      - The batch has its own permalink: derive the seeds from one base seed (`?seed=…&n=12`)
+        so the address stays short and reopening it shows the same batch.
+      - The filters are facts the client already computes for the summary strip and legend.
+      - The mini-orrery thumbnail is shared with Saved systems; build that first and batch on
+        top of it.
+      - Start with a fixed batch and filters that only hide cards. "Keep rolling until enough
+        match" is far more useful for rare things (habitable worlds) but could mean hundreds of
+        calls; it waits on the API change below.
+      - Needs the API to return several systems in one call (API suggestion 8). Until then a
+        batch of N is N fetches, so cap N.
+      - Still open: is a batch throwaway or remembered (overlaps Saved systems)?
 - [x] **Companion tether.** The tether now leaves the companion glyph's edge and drops past its
       label block before sweeping to the companion's row, instead of running through the label.
       (Per-star bands happen automatically once the API gives a star a zone; separation on the
@@ -322,6 +342,13 @@ game.
 6. **`summary` on every system:** counts of planets by book class, moons, belts, stars. Cheap
    server-side; saves the client a tree walk for the summary strip and thumbnails.
 7. **`frostLine` on every star, in au,** if a book defines it, for the distance strip.
+8. **Several systems in one call** (noted 2026-10-11, for Batch roll and pick): a count
+   parameter, or a list of seeds, on each generator route, returning that many systems in one
+   response. Without it a batch of N costs N requests, and "roll until enough match a filter"
+   is not practical against the live API. Worth deciding with it: how the seeds of a batch
+   derive from a base seed (so a batch is reproducible from one seed and a count), a cap on
+   the count, and whether a lighter per-system summary (suggestion 6) can be returned in
+   place of the full tree, since a thumbnail and filters need far less than the whole system.
 
 ## Small fixes noticed along the way
 

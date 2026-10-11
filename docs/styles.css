@@ -768,6 +768,13 @@ code {
   max-width: 320px;
 }
 
+/* A hazard the book flags on a world (aow's episodic resurfacing). */
+.warn {
+  color: #e0a84a;
+  margin-left: 0.5em;
+  white-space: nowrap;
+}
+
 .habitable-dot {
   display: inline-block;
   width: 0.55em;
@@ -985,6 +992,10 @@ pre {
 
   .badge-planet {
     border-color: #a9bfe6;
+  }
+
+  .warn {
+    color: #8a6100;
   }
 
   .badge-moon {
