@@ -122,9 +122,13 @@ button:hover {
   margin-top: 0.25rem;
 }
 
+.actions button {
+  flex: none; /* a long status must wrap itself, not squeeze the buttons onto two lines */
+}
+
 .status {
   color: var(--muted);
-  overflow-wrap: anywhere; /* the full request URL must not force the page wider than a phone */
+  overflow-wrap: anywhere; /* an error naming the API URL must not force the page wider than a phone */
 }
 
 .status.error {

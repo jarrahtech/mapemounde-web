@@ -1687,7 +1687,7 @@ async function generate({ updateUrl = true } = {}) {
       els.rendered.innerHTML = render(body);
     }
     els.result.hidden = false;
-    setStatus(`OK (${url})`, false);
+    setStatus("", false);
     if (updateUrl) pushUrlParams();
   } catch (err) {
     if (id !== requestId) return;
