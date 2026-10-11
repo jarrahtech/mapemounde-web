@@ -188,13 +188,23 @@ function renderValue(v) {
   return text(v);
 }
 
+// Shares the API sends as a bare 0–1 number (API.md: ad2300 `oxygen` and `water`; aow's
+// `hydrographicCoverage` is the same figure). The world panel and hover card already read them as
+// percentages, so the grids do too — a record that says "80% cover" above and "0.8" below reads as
+// two different facts. A named exception to the generic renderer, to go when the API emits a unit;
+// the raw JSON still shows the number as sent.
+const FRACTION_KEYS = new Set(["oxygen", "water", "hydrographicCoverage"]);
+
 // A definition-list grid from [key, value] pairs. Absent values are skipped (the API omits, not
 // nulls, but we guard anyway). Returns an em dash when nothing is left to show.
 function renderGrid(entries) {
   const rows = entries
     .filter(([, val]) => val !== null && val !== undefined)
     .map(([k, val]) => {
-      const html = k === "composition" && isComposition(val) ? compositionHtml(val) : renderValue(val);
+      const html =
+        k === "composition" && isComposition(val) ? compositionHtml(val)
+        : FRACTION_KEYS.has(k) && typeof val === "number" && val >= 0 && val <= 1 ? unitHtml(val * 100, "%")
+        : renderValue(val);
       return `<dt>${escapeHtml(humanize(k))}</dt><dd>${html}</dd>`;
     })
     .join("");

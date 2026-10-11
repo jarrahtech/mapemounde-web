@@ -302,6 +302,21 @@ game.
    can change measurement units easily; it needs hooks in the web-api. This retires the
    client's unit tables (`RADIUS_UNIT_M` today; density and mass would follow for colour and
    comparison bars).
+   **Bare numbers that want a unit** (noted 2026-10-11, from ad2300 seed 7217364403128242,
+   btech 44 and aow 4). The generic grids can only print what arrives, so these show as plain
+   numbers in "All data":
+   - *Shares sent as 0–1:* ad2300 `body.oxygen`, `body.water`; aow
+     `hydrosphere.hydrographicCoverage`. Emit as a percentage quantity. The client shows these
+     three as percentages itself for now (`FRACTION_KEYS` in `app.js`); remove that, and
+     adjust `waterFraction()`, when the API changes.
+   - *Angles, presumably degrees:* aow `spin.obliquity` and a moon's `rotation.obliquity`
+     (0–40 seen).
+   - *A quantity with no unit, meaning not known to the client:* aow `atmosphere.totalMass`
+     (0–31 seen; the composition amounts sum to it) and `rotation.localYear` (1,379–161,665
+     seen).
+   - *Probably right as plain numbers, but worth confirming:* aow `orbit.eccentricity`,
+     `atmosphere.retention` (0–2.1), `climate.mNumber` (1–23); btech `lifeMod`, and the
+     counts `belt.small` and `belt.medium`.
 5. **`label` on every node** (a display string), so the client stops synthesising one. Low
    value now that the label is simply the book's own class name.
 6. **`summary` on every system:** counts of planets by book class, moons, belts, stars. Cheap
