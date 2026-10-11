@@ -94,7 +94,11 @@ Small, mostly no API change. Together these turn "seven identical discs" into a 
       previous row ran out, a tighter gap — and the orrery re-fits on window resize. Shedding
       label lines proved unnecessary once rows wrap. Horizontal scroll remains only as a fallback
       that should not trigger. [M]
-- [ ] **Revisit the wide-system layout.** The strips work but still do not look right. Tried so
+- [-] **Revisit the wide-system layout.** *Ignore (decided 2026-10-11): staggered labels were
+      mocked up at 70px and 84px spacing on btech 44, aow 4 and at phone width and not adopted
+      (harder to scan, labels collide with connectors, the split is reduced but not removed);
+      the distance strip now shows the whole system in order whenever the map splits.* The
+      strips work but still do not look right. Tried so
       far: a single scrolling row (hides the outer half), continuation rows with a ghost star and
       restarted orbits (reads as a second system), and the current strips (arcs and a connector).
       The constraint: 13–16 bodies cannot share one 936px row at meaningful glyph sizes, since a

@@ -775,6 +775,7 @@ code {
   white-space: nowrap;
 }
 
+/* The book's habitability flag in the world panel; the colour mirrors HABITABLE_INK in app.js. */
 .habitable-dot {
   display: inline-block;
   width: 0.55em;
@@ -782,10 +783,6 @@ code {
   margin-right: 0.4em;
   border-radius: 50%;
   background: #6fcf97;
-}
-
-.figures > summary {
-  font-size: 0.85rem;
 }
 
 .figures > .node-detail {
@@ -817,7 +814,8 @@ code {
   margin-top: 0.1rem;
 }
 
-.moons-wrap > summary {
+.moons-wrap > summary,
+.figures > summary {
   font-size: 0.85rem;
 }
 
@@ -994,10 +992,6 @@ pre {
     border-color: #a9bfe6;
   }
 
-  .warn {
-    color: #8a6100;
-  }
-
   .badge-moon {
     color: #1f7a63;
     border-color: #a5d3c6;
@@ -1008,6 +1002,10 @@ pre {
   .badge-moonlet {
     color: #6b3fa0;
     border-color: #cdb8e6;
+  }
+
+  .warn {
+    color: #8a6100;
   }
 
   /* Browsers drop backgrounds when printing; the composition bar and its key are nothing else. */

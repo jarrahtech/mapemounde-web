@@ -167,8 +167,8 @@ function bodyLabel(node) {
 
 const n2 = (v) => v.toFixed(2);
 
-function svgText(x, y, content, size, fill, weight = 400) {
-  return `<text x="${n2(x)}" y="${n2(y)}" text-anchor="middle" font-family="system-ui, sans-serif" font-size="${size}" font-weight="${weight}" fill="${fill}">${content}</text>`;
+function svgText(x, y, content, size, fill, weight = 400, anchor = "middle") {
+  return `<text x="${n2(x)}" y="${n2(y)}" text-anchor="${anchor}" font-family="system-ui, sans-serif" font-size="${size}" font-weight="${weight}" fill="${fill}">${content}</text>`;
 }
 
 // --- generic value renderer -------------------------------------------------------------------
@@ -496,6 +496,7 @@ const ROCK_TINTS = [
   { name: "hothouse", below: Infinity, fill: "#e3c45a" }, // Venus yellow
 ];
 const WET_COVERAGE = 0.3; // water fraction at or above which a temperate world reads as ocean
+const OCEAN_FILL = ROCK_TINTS.find((b) => b.wet).wet;
 
 // ad2300 states a temperature in words (its AverageTemperature enum) rather than a surface figure,
 // and only that word reflects the atmosphere: its HotHouse worlds sit at 330–450K blackbody, which
@@ -576,8 +577,10 @@ function moonDots(x, y, r, moons) {
 // them; a single ellipse would sit wholly on top and read as a hoop in front of the planet. The ring
 // scales with the disc but has a floor, so a ringed dwarf still reads as ringed rather than as a dot
 // with a line through it.
+const ringRx = (r) => Math.max(2 * r, 14);
+
 function ringPaths(x, y, r) {
-  const rx = Math.max(2 * r, 14);
+  const rx = ringRx(r);
   const ry = rx * 0.275;
   // sweep=1 is the top (far) half, sweep=0 the bottom (near) half; both share the same tilt.
   const half = (sweep) =>
@@ -618,6 +621,10 @@ function radiusM(q) {
 // A radius the client can't read draws Earth-sized rather than vanishing.
 const PLANET_PX = { earth: 10, min: 5, max: 22 };
 PLANET_PX.perDecade = (PLANET_PX.max - PLANET_PX.earth) / Math.log10(11.2);
+
+// Where a planet falls between the smallest and largest glyph, 0–1, for the small marks that can
+// only hint at size (the record portrait, the distance strip).
+const planetSizeFrac = (node) => (planetRadiusPx(node) - PLANET_PX.min) / (PLANET_PX.max - PLANET_PX.min);
 
 function planetRadiusPx(node) {
   const m = radiusM(node.core?.radius);
@@ -919,11 +926,13 @@ function bodySvg(row, b) {
 // The habitable zone as a translucent band between two orbits: an evenodd annulus of two ellipses
 // in a full row, and the region between two orbit arcs in a strip. Drawn first, under the orbit
 // lines and glyphs. The book's figures put it here; the client only maps them onto the rank scale.
+const ZONE_STYLE = `fill="${HABITABLE_INK}" fill-opacity="0.13" stroke="${HABITABLE_INK}" stroke-opacity="0.35" stroke-width="1"`;
+
 function zoneSvg(row) {
   const { rxIn, rxOut } = row.zone;
   const ry = (rx) => ORRERY.maxRy * Math.sqrt(rx / row.maxRx);
   const x = row.x, y = row.y;
-  const style = `fill="${HABITABLE_INK}" fill-opacity="0.13" stroke="${HABITABLE_INK}" stroke-opacity="0.35" stroke-width="1"`;
+  const style = ZONE_STYLE;
   if (row.from) {
     const a = 0.4;
     const pt = (rx, sign) => `${n2(x + rx * Math.cos(a))},${n2(y + sign * ry(rx) * Math.sin(a))}`;
@@ -989,8 +998,7 @@ function orreryRowSvg(row) {
 // How far a row's label block reaches below its baseline: three lines plus a descender.
 const LABEL_DEPTH = ORRERY.labelTop + 2 * ORRERY.lineHeight + 8;
 
-function renderOrrerySvg(root, available = 0) {
-  const rows = layoutOrrery(root, available);
+function renderOrrerySvg(root, available = 0, rows = layoutOrrery(root, available)) {
 
   let width = 0;
   let height = 0;
@@ -1034,7 +1042,23 @@ function renderOrrerySvg(root, available = 0) {
 // rather than scaled to it, so the tick labels stay legible on a phone.
 const DIST = { maxW: 900, minW: 340, x0: 84, padR: 20, top: 16, pitch: 38, foot: 22, head: 15 };
 
-function distanceStripSvg(root, available = 0) {
+// A log10 scale over [min, max] laid along [x0, x1]: never narrower than 0.4 of a decade, and padded
+// by `pad` of its span at each end. Returns the padded bounds (as exponents) and the mapper.
+function logAxis(min, max, x0, x1, pad) {
+  let lo = Math.log10(min);
+  let hi = Math.log10(max);
+  if (hi - lo < 0.4) {
+    const mid = (lo + hi) / 2;
+    lo = mid - 0.2;
+    hi = mid + 0.2;
+  }
+  const margin = (hi - lo) * pad;
+  lo -= margin;
+  hi += margin;
+  return { lo, hi, X: (v) => x0 + ((Math.log10(v) - lo) / (hi - lo)) * (x1 - x0) };
+}
+
+function distanceStripSvg(root, available) {
   const rows = [];
   const walk = (star) => {
     const bodies = (star.children || [])
@@ -1054,19 +1078,9 @@ function distanceStripSvg(root, available = 0) {
   if (!rows.length) return "";
 
   const all = rows.flatMap((r) => r.bodies);
-  let lo = Math.log10(Math.min(...all.map((b) => b.near)));
-  let hi = Math.log10(Math.max(...all.map((b) => b.far)));
-  if (hi - lo < 0.4) {
-    const mid = (lo + hi) / 2;
-    lo = mid - 0.2;
-    hi = mid + 0.2;
-  }
-  const pad = (hi - lo) * 0.05;
-  lo -= pad;
-  hi += pad;
-  const w = Math.max(DIST.minW, Math.min(DIST.maxW, available || DIST.maxW));
+  const w = Math.max(DIST.minW, Math.min(DIST.maxW, available));
   const x1 = w - DIST.padR;
-  const X = (au) => DIST.x0 + ((Math.log10(au) - lo) / (hi - lo)) * (x1 - DIST.x0);
+  const { lo, hi, X } = logAxis(Math.min(...all.map((b) => b.near)), Math.max(...all.map((b) => b.far)), DIST.x0, x1, 0.05);
   const clampX = (au) => Math.max(DIST.x0, Math.min(x1, X(au)));
   const bottom = DIST.top + (rows.length - 1) * DIST.pitch + 14;
   const h = bottom + DIST.foot;
@@ -1081,29 +1095,30 @@ function distanceStripSvg(root, available = 0) {
     for (const m of steps) {
       const au = m * 10 ** e;
       if (Math.log10(au) < lo || Math.log10(au) > hi) continue;
-      const x = n2(X(au));
-      parts.push(`<line x1="${x}" y1="${DIST.top - 10}" x2="${x}" y2="${bottom}" stroke="currentColor" stroke-opacity="${m === 1 ? 0.13 : 0.07}" />`);
-      parts.push(svgText(X(au), bottom + 13, escapeHtml(String(Number(au.toPrecision(1)))), 10, MUTED_INK));
+      const x = X(au);
+      parts.push(`<line x1="${n2(x)}" y1="${DIST.top - 10}" x2="${n2(x)}" y2="${bottom}" stroke="currentColor" stroke-opacity="${m === 1 ? 0.13 : 0.07}" />`);
+      parts.push(svgText(x, bottom + 13, escapeHtml(sig3(au)), 10, MUTED_INK));
     }
   }
-  parts.push(`<text x="4" y="${bottom + 13}" font-family="system-ui, sans-serif" font-size="10" fill="${MUTED_INK}">au, log scale</text>`);
+  parts.push(svgText(4, bottom + 13, "au, log scale", 10, MUTED_INK, 400, "start"));
 
   rows.forEach((row, i) => {
     const y = DIST.top + i * DIST.pitch;
     const zone = starZoneAu(row.star);
     if (zone) {
-      const x0 = clampX(zone.inner), x1 = clampX(zone.outer);
-      if (x1 - x0 > 1) parts.push(`<rect x="${n2(x0)}" y="${y - 9}" width="${n2(x1 - x0)}" height="18" rx="3" fill="${HABITABLE_INK}" fill-opacity="0.13" stroke="${HABITABLE_INK}" stroke-opacity="0.35" />`);
+      const zx0 = clampX(zone.inner), zx1 = clampX(zone.outer);
+      if (zx1 - zx0 > 1) parts.push(`<rect x="${n2(zx0)}" y="${y - 9}" width="${n2(zx1 - zx0)}" height="18" rx="3" ${ZONE_STYLE} />`);
     }
     parts.push(`<line x1="${DIST.x0}" y1="${y}" x2="${x1}" y2="${y}" stroke="currentColor" stroke-opacity="0.25" />`);
     const tint = starTint(row.star);
     tints.add(tint);
     parts.push(hoverable(row.star, starGlyph(DIST.head, y, headR(row.star), tint, "dist") +
-      `<text x="${DIST.head + 15}" y="${y + 3.5}" font-family="system-ui, sans-serif" font-size="10" font-weight="600" fill="currentColor">${escapeHtml(bodyLabel(row.star))}</text>`));
+      svgText(DIST.head + 15, y + 3.5, escapeHtml(bodyLabel(row.star)), 10, "currentColor", 600, "start")));
     for (const b of row.bodies) {
       const x = X(b.au);
-      if (X(b.far) - X(b.near) > 2) {
-        parts.push(`<line x1="${n2(X(b.near))}" y1="${y}" x2="${n2(X(b.far))}" y2="${y}" stroke="currentColor" stroke-opacity="0.3" stroke-width="3" stroke-linecap="round" />`);
+      const xNear = X(b.near), xFar = X(b.far);
+      if (xFar - xNear > 2) {
+        parts.push(`<line x1="${n2(xNear)}" y1="${y}" x2="${n2(xFar)}" y2="${y}" stroke="currentColor" stroke-opacity="0.3" stroke-width="3" stroke-linecap="round" />`);
       }
       let mark;
       if (b.node.kind === "star") {
@@ -1114,7 +1129,7 @@ function distanceStripSvg(root, available = 0) {
         mark = [-5, 0, 5].map((dy) => `<circle cx="${n2(x)}" cy="${y + dy}" r="1.7" fill="${RING_INK}" />`).join("");
       } else {
         const planet = b.node.kind === "planet";
-        const r = planet ? 2.5 + (3.5 * (planetRadiusPx(b.node) - PLANET_PX.min)) / (PLANET_PX.max - PLANET_PX.min) : 3;
+        const r = planet ? 2.5 + 3.5 * planetSizeFrac(b.node) : 3;
         mark = `<circle cx="${n2(x)}" cy="${y}" r="${n2(r)}" fill="${planet ? planetTint(b.node).fill : GLYPH_DEFAULT.fill}" />`;
         if (planet && habitableFlag(b.node)) mark += `<circle cx="${n2(x)}" cy="${n2(y + r + 4)}" r="1.8" fill="${HABITABLE_INK}" />`;
       }
@@ -1209,7 +1224,7 @@ function legendHtml(root) {
     const discs = bands.map((b, i) => disc(c + 30 * i, c, 7, b.fill)).join("");
     add(swatch(discs, bands.length), `${bands[0].name} → ${bands[bands.length - 1].name}`);
   }
-  if (used.has("ocean")) add(swatch(disc(c, c, 7, ROCK_TINTS.find((b) => b.wet).wet)), "ocean");
+  if (used.has("ocean")) add(swatch(disc(c, c, 7, OCEAN_FILL)), "ocean");
   if (used.has("unknown")) add(swatch(disc(c, c, 7, MUTED_INK)), "unknown");
   if (used.has("zone")) {
     const band = `<path d="M3,${c} A12,7 0 1 0 27,${c} A12,7 0 1 0 3,${c} M8,${c} A7,4 0 1 0 22,${c} A7,4 0 1 0 8,${c}" fill-rule="evenodd" fill="${HABITABLE_INK}" fill-opacity="0.25" stroke="${HABITABLE_INK}" stroke-opacity="0.6" stroke-width="1" />`;
@@ -1297,19 +1312,22 @@ function nonEmpty(obj) {
 // The record's portrait: the body as the orrery draws it, at icon size, so a record and its glyph
 // share an identity. Built from the orrery's own functions. Size is only hinted (a giant's disc is
 // larger than a dwarf's) since an icon cannot carry the log scale; moons are a grey dot until the
-// moon-colour item lands; a ring record shows the ring alone.
-function portraitSvg(node, scale = 1) {
-  const w = 40; // wide enough for a ringed giant's ring tips
+// moon-colour item lands; a ring record shows the ring alone. `large` is the planet's portrait in
+// its world panel: the same glyph at PORTRAIT_LARGE px per unit, in a box cut to fit it.
+const PORTRAIT_R = { min: 5, max: 9 }; // a planet's disc, in the portrait's 40 × 26 units
+const PORTRAIT_LARGE = 2.8;
+
+function portraitSvg(node, large = false) {
   const cx = 20;
   const cy = 13;
   let inner;
-  let box = `0 0 ${w} 26`;
-  let size = [32 * scale, 21 * scale];
+  let box = "0 0 40 26"; // wide enough for a ringed giant's ring tips
+  let size = [32, 21];
   if (node.kind === "star") {
     const ids = `portrait${node.id}`;
     inner = `<defs>${starTintDefs([starTint(node)], ids)}</defs>${starGlyph(cx, cy, 8, starTint(node), ids)}`;
   } else if (node.kind === "planet") {
-    const r = 5 + (4 * (planetRadiusPx(node) - PLANET_PX.min)) / (PLANET_PX.max - PLANET_PX.min);
+    const r = PORTRAIT_R.min + (PORTRAIT_R.max - PORTRAIT_R.min) * planetSizeFrac(node);
     const tint = planetTint(node);
     const disc = `<circle cx="${cx}" cy="${cy}" r="${n2(r)}" fill="${tint.fill}" />` + (tint.band ? giantBands(cx, cy, r, tint.band) : "");
     const ringed = childSummary(node).ring;
@@ -1319,18 +1337,16 @@ function portraitSvg(node, scale = 1) {
     } else {
       inner = disc;
     }
-    // At size (the world panel) the box is cut to what is drawn, so a plain disc does not sit in
-    // the space a ringed giant needs, and the glyph starts at the box's left edge, under the badge.
-    // Its width is the widest a glyph of that sort can be — one for discs, one for ringed worlds —
-    // so the gauges beside it line up from world to world. The ring's half-height allows for its
-    // 18° tilt.
-    if (scale > 1) {
-      const rx = Math.max(2 * r, 14);
-      const hw = (ringed ? rx : r) + 1.5;
-      const hh = (ringed ? Math.max(r, rx * 0.45) : r) + 1.5;
-      const boxW = 2 * ((ringed ? 18 : 9) + 1.5); // the 9-unit cap on r above, and its ring
+    // The large box is cut to what is drawn, so a plain disc does not sit in the space a ringed
+    // giant needs, and the glyph starts at the box's left edge, under the badge. Its width is the
+    // widest a glyph of that sort can be — one for discs, one for ringed worlds — so the gauges
+    // beside it line up from world to world. The ring's half-height allows for its 18° tilt.
+    if (large) {
+      const hw = (ringed ? ringRx(r) : r) + 1.5;
+      const hh = (ringed ? Math.max(r, ringRx(r) * 0.45) : r) + 1.5;
+      const boxW = 2 * ((ringed ? ringRx(PORTRAIT_R.max) : PORTRAIT_R.max) + 1.5);
       box = `${n2(cx - hw)} ${n2(cy - hh)} ${boxW} ${n2(2 * hh)}`;
-      size = [boxW * 0.8 * scale, 2 * hh * 0.8 * scale];
+      size = [boxW * PORTRAIT_LARGE, 2 * hh * PORTRAIT_LARGE];
     }
   } else if (node.kind === "asteroidBelt") {
     inner = beltGlyph({ x: cx - 10, y: cy }, { rx: 10, ry: 30 });
@@ -1365,18 +1381,8 @@ function orbitKm(node) {
 function moonStripSvg(node) {
   const sats = (node.children || []).filter(isSatellite).map((s) => ({ s, km: orbitKm(s) })).filter((x) => x.km > 0);
   if (!sats.length) return "";
-  const logs = sats.map((x) => Math.log10(x.km));
-  let lo = Math.min(...logs);
-  let hi = Math.max(...logs);
-  if (hi - lo < 0.4) {
-    const mid = (lo + hi) / 2;
-    lo = mid - 0.2;
-    hi = mid + 0.2;
-  }
-  const pad = (hi - lo) * 0.06;
-  lo -= pad;
-  hi += pad;
-  const X = (km) => STRIP.x0 + ((Math.log10(km) - lo) / (hi - lo)) * (STRIP.x1 - STRIP.x0);
+  const kms = sats.map((x) => x.km);
+  const { lo, hi, X } = logAxis(Math.min(...kms), Math.max(...kms), STRIP.x0, STRIP.x1, 0.06);
   const y = STRIP.y;
   const parts = [`<line x1="${STRIP.x0}" y1="${y}" x2="${STRIP.x1}" y2="${y}" stroke="currentColor" stroke-opacity="0.25" />`];
   for (let e = Math.ceil(lo); e <= Math.floor(hi); e++) {
@@ -1430,6 +1436,8 @@ const LIFE_STAGES = [
 ];
 
 const logFrac = (v, lo, hi) => (v > 0 ? Math.log10(v / lo) / Math.log10(hi / lo) : 0);
+// A marker on a log scale from lo to hi, with one reference tick at 1 (Earth, or 1 atm).
+const logGauge = (v, lo, hi, label) => gaugeSvg(logFrac(v, lo, hi), [[logFrac(1, lo, hi), label]]);
 
 // `frac` is 0–1 along the track; `ticks` are [frac, label] reference marks; `fill` draws a bar
 // from the left (a share of a whole) in place of a marker (a point on a scale).
@@ -1450,40 +1458,30 @@ function gaugeSvg(frac, ticks = [], fill = null) {
 function worldPanelHtml(node) {
   const rows = [];
   const add = (label, gauge, value) => rows.push(`<dt>${label}</dt><dd>${gauge}</dd><dd>${value}</dd>`);
+  const wide = (label, html) => rows.push(`<dt>${label}</dt><dd class="wide">${html}</dd>`);
 
-  const rm = radiusM(node.core?.radius);
-  if (rm !== null) {
-    const re = rm / EARTH_RADIUS_M;
-    add("Radius", gaugeSvg(logFrac(re, 0.1, 20), [[logFrac(1, 0.1, 20), "⊕"]]), unitHtml(re, "R⊕"));
-  }
-  const g = node.core?.surfaceGravity;
-  if (isQuantity(g) && g.unit === "m/s²") {
-    const gs = g.value / G0;
-    add("Gravity", gaugeSvg(logFrac(gs, 0.05, 10), [[logFrac(1, 0.05, 10), "⊕"]]), unitHtml(gs, "g"));
-  }
+  const re = radiusEarths(node);
+  if (re !== null) add("Radius", logGauge(re, 0.1, 20, "⊕"), unitHtml(re, "R⊕"));
+  const gs = gravityG(node);
+  if (gs !== null) add("Gravity", logGauge(gs, 0.05, 10, "⊕"), unitHtml(gs, "g"));
   const k = planetTempK(node);
-  if (k !== null) {
-    add("Temperature", gaugeSvg(k / TEMP_GAUGE_MAX_K, [[273.15 / TEMP_GAUGE_MAX_K, "0°C"], [373.15 / TEMP_GAUGE_MAX_K, "100°C"]]), tempFact(node));
-  } else if (tempFact(node)) {
-    add("Temperature", "", tempFact(node));
+  const temp = tempFact(node);
+  if (temp) {
+    const gauge = k === null ? "" : gaugeSvg(k / TEMP_GAUGE_MAX_K, [[273.15 / TEMP_GAUGE_MAX_K, "0°C"], [373.15 / TEMP_GAUGE_MAX_K, "100°C"]]);
+    add("Temperature", gauge, temp);
   }
-  const p = node.body?.atmosphericPressure ?? node.world?.atmosphere?.pressure;
+  const p = atmospherePressure(node);
   const atmosphere = atmosphereFact(node);
-  if (atmosphere) {
-    const gauge = isQuantity(p) && p.unit === "atm" ? gaugeSvg(logFrac(p.value, 0.001, 1000), [[logFrac(1, 0.001, 1000), "1 atm"]]) : "";
-    add("Atmosphere", gauge, atmosphere);
-  }
-  const gases = node.planet?.habitability?.composition ?? node.world?.atmosphere?.composition;
-  if (isComposition(gases)) rows.push(`<dt>Composition</dt><dd class="wide">${compositionHtml(gases, false)}</dd>`);
+  if (atmosphere) add("Atmosphere", isQuantity(p) && p.unit === "atm" ? logGauge(p.value, 0.001, 1000, "1 atm") : "", atmosphere);
+  const gases = atmosphereGases(node);
+  if (isComposition(gases)) wide("Composition", compositionHtml(gases, false));
   const water = waterFraction(node);
   if (water !== null) {
     const prevalence = node.world?.hydrosphere?.waterPrevalence;
-    add("Water", gaugeSvg(water, [], ROCK_TINTS.find((b) => b.wet).wet),
-      `${Math.round(water * 100)}% cover${prevalence ? ` · ${escapeHtml(humanize(prevalence))}` : ""}`);
+    add("Water", gaugeSvg(water, [], OCEAN_FILL), waterCoverText(water) + (prevalence ? ` · ${escapeHtml(humanize(prevalence))}` : ""));
   }
   // The depth only aow gives a world (`world.rotation`, `.geophysics`, `.biosphere`): words, not
   // gauges, in the book's own terms.
-  const wide = (label, html) => rows.push(`<dt>${label}</dt><dd class="wide">${html}</dd>`);
   const spin = node.world?.rotation?.spin;
   if (spin) {
     const day = node.world.rotation.localDay ?? spin.period;
@@ -1506,9 +1504,7 @@ function worldPanelHtml(node) {
     const stage = LIFE_STAGES.filter(([key]) => isQuantity(bio[key])).pop();
     wide("Life", stage ? `${stage[1]} <span class="unit">at ${qtyHtml(bio[stage[0]])}</span>` : "None");
   }
-  if (habitableFlag(node)) {
-    rows.push(`<dt>Habitable</dt><dd class="wide"><span class="habitable-dot"></span>yes (${escapeHtml(HABITABLE_FLAG_NAME[GENERATOR] || "the book's flag")})</dd>`);
-  }
+  if (habitableFlag(node)) wide("Habitable", `<span class="habitable-dot"></span>${escapeHtml(habitableText())}`);
   return rows.length ? `<dl class="gauges">${rows.join("")}</dl>` : "";
 }
 
@@ -1547,7 +1543,7 @@ function renderNode(node, hasGlyph) {
   const detail = `<div class="node-detail">${sections.join("")}</div>`;
   const body = gauges
     ? `<div class="world-panel">
-        ${portraitSvg(node, 3.5)}
+        ${portraitSvg(node, true)}
         <div class="world-body">
           ${gauges}
           ${satellites}
@@ -1643,8 +1639,8 @@ function orreryCardHtml(data, width = availableWidth()) {
   // The distance strip only where the map is split over more than one row (a companion's row, or
   // continuation strips — most systems on a phone): a single row already reads in order, with the
   // radius under each glyph, and the strip adds little to it.
-  const split = layoutOrrery(data.root, width).length > 1;
-  return `${summaryHtml(data)}${renderOrrerySvg(data.root, width)}${split ? distanceStripSvg(data.root, width) : ""}
+  const rows = layoutOrrery(data.root, width);
+  return `${summaryHtml(data)}${renderOrrerySvg(data.root, width, rows)}${rows.length > 1 ? distanceStripSvg(data.root, width) : ""}
     <div class="orrery-foot">
       <button type="button" class="orrery-download" title="Download this map as an SVG">⬇ Download SVG</button>
       ${legendHtml(data.root)}
@@ -1691,7 +1687,6 @@ function unitHtml(value, unit) {
   return `${escapeHtml(sig3(value))}<span class="unit">${escapeHtml(unit)}</span>`;
 }
 
-// An orbital period in hours, days or Earth years, whichever keeps the number readable.
 // A quantity at three significant figures with the house-style scaling applied.
 function qtyHtml(q) {
   if (!isQuantity(q)) return "";
@@ -1726,12 +1721,32 @@ function tempFact(node) {
 // `atmosphericPressure`, btech `planet.atmosphere`, aow `world.atmosphere.worldClass` + `pressure`.
 function atmosphereFact(node) {
   const name = node.body?.atmosphere ?? node.planet?.atmosphere ?? node.world?.atmosphere?.worldClass;
-  const p = node.body?.atmosphericPressure ?? node.world?.atmosphere?.pressure;
+  const p = atmospherePressure(node);
   const parts = [];
   if (name) parts.push(escapeHtml(humanize(name)));
   if (isQuantity(p)) parts.push(unitHtml(p.value, p.unit));
   return parts.join(" · ");
 }
+
+// More of the same named field chains, shared by the hover card and the world panel so the two
+// cannot disagree about a world. Pressure: ad2300 `body.atmosphericPressure`, aow
+// `world.atmosphere.pressure` (btech gives none). Gases: btech `planet.habitability.composition`, aow
+// `world.atmosphere.composition`.
+const atmospherePressure = (node) => node.body?.atmosphericPressure ?? node.world?.atmosphere?.pressure;
+const atmosphereGases = (node) => node.planet?.habitability?.composition ?? node.world?.atmosphere?.composition;
+
+function radiusEarths(node) {
+  const rm = radiusM(node.core?.radius);
+  return rm === null ? null : rm / EARTH_RADIUS_M;
+}
+
+function gravityG(node) {
+  const g = node.core?.surfaceGravity;
+  return isQuantity(g) && g.unit === "m/s²" ? g.value / G0 : null;
+}
+
+const waterCoverText = (fraction) => `${Math.round(fraction * 100)}% cover`;
+const habitableText = () => `yes (${HABITABLE_FLAG_NAME[GENERATOR] || "the book's flag"})`;
 
 function tintName(key) {
   if (key === "gas") return "gas giant";
@@ -1756,21 +1771,21 @@ function hoverCardHtml(node, isPrimary) {
     if (isQuantity(node.orbit?.radius)) add("Separation", orbitFact(node));
   } else if (node.kind === "planet" || node.kind === "moon" || node.kind === "moonlet") {
     kind = [node.kind, tintName(planetTint(node).key)].filter(Boolean).join(" · ");
-    const rm = radiusM(node.core?.radius);
+    const re = radiusEarths(node);
     if (node.kind !== "planet") add("Radius", qtyHtml(node.core?.radius));
-    else if (rm !== null) add("Radius", unitHtml(rm / EARTH_RADIUS_M, "R⊕"));
-    const g = node.core?.surfaceGravity;
-    if (isQuantity(g) && g.unit === "m/s²") add("Gravity", unitHtml(g.value / G0, "g"));
+    else if (re !== null) add("Radius", unitHtml(re, "R⊕"));
+    const gs = gravityG(node);
+    if (gs !== null) add("Gravity", unitHtml(gs, "g"));
     add("Temperature", tempFact(node));
     add("Atmosphere", atmosphereFact(node));
-    const gases = node.planet?.habitability?.composition ?? node.world?.atmosphere?.composition;
+    const gases = atmosphereGases(node);
     if (isComposition(gases)) add("Composition", compositionHtml(gases, false));
     const water = waterFraction(node);
-    if (water !== null) add("Water", `${Math.round(water * 100)}% cover`);
+    if (water !== null) add("Water", waterCoverText(water));
     add("Orbit", orbitFact(node));
     const kids = childSummary(node);
     if (kids.moons || kids.ring) add("Moons", `${kids.moons || "none"}${kids.ring ? ", ringed" : ""}`);
-    if (habitableFlag(node)) add("Habitable", `yes (${HABITABLE_FLAG_NAME[GENERATOR] || "the book's flag"})`);
+    if (habitableFlag(node)) add("Habitable", habitableText());
   } else {
     kind = humanize(node.kind).toLowerCase();
     add("Orbit", orbitFact(node));
@@ -2009,16 +2024,16 @@ window.addEventListener("resize", () => {
   }, 150);
 });
 
-// Printing (the rules are under @media print in styles.css). Two things CSS cannot do: a folded
-// <details> does not print its content, so the folds in the result are opened and put back
-// afterwards — all but the moon records and a planet's "All data", which print only where the
-// reader opened them (a btech system with every moon open runs to some forty pages; the moon strip
-// and count, and the planet's panel, print regardless);
-// and the orrery is fitted to the window, not the paper, so it is re-fitted to
-// PRINT_WIDTH — roughly what A4 or Letter portrait leaves between default margins — and put back
-// too (from a saved copy, not re-measured: the print rules may still apply when afterprint fires).
-// The paper's real width cannot be measured from here; a wider sheet just prints the map at its
-// natural size. The page's own address is printed above the map, since the form is not.
+// Printing (the rules are under @media print in styles.css). Three things CSS cannot do:
+// - A folded <details> does not print its content, so the folds in the result are opened and put
+//   back afterwards. All but the moon records and a planet's "All data", which print only where the
+//   reader opened them: a btech system with every moon open runs to some forty pages. The moon
+//   strip and count, and the planet's panel, print regardless.
+// - The orrery is fitted to the window, not the paper, so it is re-fitted to PRINT_WIDTH (roughly
+//   what A4 or Letter portrait leaves between default margins) and put back too — from a saved
+//   copy, not re-measured, since the print rules may still apply when afterprint fires. The paper's
+//   real width cannot be measured from here; a wider sheet just prints the map at natural size.
+// - The page's own address is printed above the map, since the form that holds the seed is not.
 const PRINT_WIDTH = 680;
 let printClosed = [];
 let screenCard = null; // the orrery card's on-screen HTML while a print is in progress
