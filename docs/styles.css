@@ -329,7 +329,8 @@ section#result {
   margin: 0.3rem 0.25rem 0;
 }
 
-.legend-wrap > summary {
+.legend-wrap > summary,
+.orrery-download {
   list-style: none;
   cursor: pointer;
   font-size: 0.78rem;
@@ -345,8 +346,27 @@ section#result {
 }
 
 .legend-wrap[open] > summary,
-.legend-wrap > summary:hover {
+.legend-wrap > summary:hover,
+.orrery-download:hover {
   color: var(--text);
+}
+
+/* The download pill sits at the bottom left, on the legend pill's line; out of the flow so the
+   legend still unfolds across the card's full width. */
+.orrery-foot {
+  position: relative;
+}
+
+.orrery-download {
+  position: absolute;
+  top: 0; /* the legend's top margin collapses through .orrery-foot, so its pill starts here too */
+  left: 0.25rem;
+  font-weight: 400;
+  line-height: inherit;
+}
+
+.orrery-download:hover {
+  filter: none;
 }
 
 .legend-panel {
@@ -393,6 +413,11 @@ section#result {
 
 .tree-wrap > summary {
   margin-bottom: 0.5rem;
+}
+
+/* The page's own address, printed above the map (the form that holds the seed is not printed). */
+.print-ref {
+  display: none;
 }
 
 /* Summary strip: what the map cannot answer at a glance, as chips above it in the orrery card. */
@@ -771,5 +796,123 @@ pre {
 
   .facts dd {
     margin-bottom: 0.5rem;
+  }
+}
+
+/* Print: dark on screen, light on paper. The palette flips through the custom properties, the
+   controls go, and the system prints as the summary and map followed by every record. app.js
+   opens the folds and re-fits the map for the page (see beforeprint there). */
+@media print {
+  :root {
+    --bg: #fff;
+    --panel: #fff;
+    --panel-2: #f3f5f8;
+    --text: #111;
+    --muted: #555d6b;
+    --accent: #1f4fa8;
+    --border: #c5cbd4;
+    --error: #b3261e;
+  }
+
+  /* 9pt: screen sizes are generous on paper, and everything in rem follows. */
+  html {
+    font-size: 12px;
+  }
+
+  header,
+  main {
+    max-width: none;
+    padding: 0;
+  }
+
+  .crumb,
+  form,
+  .hex-controls,
+  .hover-card,
+  .orrery-download,
+  .legend-wrap > summary,
+  .tree-wrap > summary,
+  #result > details {
+    display: none;
+  }
+
+  .print-ref {
+    display: block;
+    margin: 0 0 0.5rem;
+    font-size: 0.8rem;
+    color: var(--muted);
+    overflow-wrap: anywhere;
+  }
+
+  /* Cards lose their box: a border that runs across a page break reads as a broken frame. */
+  .card {
+    border: 0;
+    padding: 0;
+    overflow: visible;
+  }
+
+  .tree-wrap {
+    overflow: visible;
+  }
+
+  .legend-wrap {
+    align-items: stretch;
+  }
+
+  summary {
+    list-style: none;
+  }
+
+  summary::-webkit-details-marker {
+    display: none;
+  }
+
+  /* The glyph colours are literal and were chosen against the dark page; a thin outline keeps the
+     pale ones (ice worlds, moons) visible on white. Star glows are gradients and stay bare. */
+  .orrery-card svg circle:not([fill^="url"]),
+  .tree svg circle:not([fill^="url"]) {
+    stroke: #111;
+    stroke-opacity: 0.45;
+    stroke-width: 0.5;
+  }
+
+  .badge-star {
+    color: #8a6100;
+    border-color: #d9c48a;
+  }
+
+  .badge-planet {
+    border-color: #a9bfe6;
+  }
+
+  .badge-moon {
+    color: #1f7a63;
+    border-color: #a5d3c6;
+  }
+
+  .badge-asteroidBelt,
+  .badge-ring,
+  .badge-moonlet {
+    color: #6b3fa0;
+    border-color: #cdb8e6;
+  }
+
+  /* Browsers drop backgrounds when printing; the composition bar and its key are nothing else. */
+  .comp-bar span,
+  .comp-key li::before {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Keep a record's head with its figures, and the small blocks in one piece. A section of
+     figures may split: aow's run longer than a page, and holding them whole leaves pages half empty. */
+  .node-head,
+  .sect h4 {
+    break-after: avoid;
+  }
+
+  .moon-strip,
+  .comp {
+    break-inside: avoid;
   }
 }

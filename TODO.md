@@ -186,11 +186,18 @@ Small, mostly no API change. Together these turn "seven identical discs" into a 
 - [ ] **Saved systems.** A localStorage list of (generator, seed, params, names) with
       mini-orrery thumbnails; click to restore. Doubles as the "recent rolls" history strip.
       Export/import as JSON so it survives a browser. [M]
-- [ ] **Download the orrery as SVG.** Light palette baked at export, as `downloadSvg()` does
-      for the hex. [S]
-- [ ] **Print stylesheet.** `@media print`: light background, form and raw JSON hidden, all
-      details expanded, orrery + summary + one card per world, page breaks between worlds.
-      This is the cheapest route to "the text too". [M]
+- [x] **Download the orrery as SVG.** A "⬇ Download SVG" pill at the bottom left of the orrery
+      card saves `<generator>-<seed>.svg`: the map alone (no summary or legend), redrawn at
+      natural size in a single row whatever the window width, on a transparent background with
+      dark ink as `downloadSvg()` does for the hex, and a thin outline on planet discs so pale
+      worlds show on paper. [S]
+- [x] **Print stylesheet.** `@media print`: light palette, form, controls and raw JSON hidden, the
+      page's address printed above the map, the orrery re-fitted to a portrait page, legend and
+      System detail opened, pale glyphs outlined. Two departures from the first plan, both to keep
+      the page count sane: moon records print only where the reader has opened them (the strip
+      and count always print), and worlds flow with no forced page breaks. On A4, ad2300 /
+      btech 44 / aow 4 print as 3 / 8 / 9 pages; every moon open is 6 / 39 / 33, and a page per
+      world on top of that 10 / 42 / 37. [M]
 - [ ] **Standalone system sheet.** A self-contained SVG or PDF with orrery, summary and world
       cards, for sharing without the site. [L]
 

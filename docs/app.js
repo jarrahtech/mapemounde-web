@@ -338,6 +338,18 @@ function fitHexName() {
 // transparent (no rect), and we set width/height so viewers have an intrinsic size.
 const EXPORT_INK = "#111";
 
+// Hand a serialized SVG to the browser as a file download, with the ink baked in (see above).
+function saveSvg(serialized, filename) {
+  const xml = '<?xml version="1.0" encoding="UTF-8"?>\n' + serialized.replace(/currentColor/g, EXPORT_INK);
+  const blob = new Blob([xml], { type: "image/svg+xml;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 function downloadSvg() {
   const svg = els.rendered.querySelector("svg.hex-svg");
   if (!svg) return;
@@ -345,17 +357,9 @@ function downloadSvg() {
   clone.removeAttribute("class");
   clone.setAttribute("width", "260");
   clone.setAttribute("height", "240");
-  const serialized = new XMLSerializer().serializeToString(clone).replace(/currentColor/g, EXPORT_INK);
-  const xml = '<?xml version="1.0" encoding="UTF-8"?>\n' + serialized;
-  const blob = new Blob([xml], { type: "image/svg+xml;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
   const base = (els.systemName.value || lastData?.seed || "hex")
     .trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "hex";
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `traveller-${base}.svg`;
-  a.click();
-  URL.revokeObjectURL(url);
+  saveSvg(new XMLSerializer().serializeToString(clone), `traveller-${base}.svg`);
 }
 
 // The last payload: the traveller name field re-draws the hex from it without re-fetching, and a
@@ -391,9 +395,9 @@ function showTraveller(data) {
 // Colours are literal hex rather than var(--…) on purpose: CSS custom properties do not survive an
 // SVG download, so the structural inks mirror the .badge-* palette in styles.css instead of reading
 // it, and the planet tints are a palette of their own below.
-// Structural ink (orbit lines, labels) uses currentColor, so it stays theme-aware on screen and can
-// be baked to a solid colour the way downloadSvg() already does for the hex. NB no orrery download
-// is wired up yet — this only keeps that option open; recolouring a badge means editing both files.
+// Structural ink (orbit lines, labels) uses currentColor, so it stays theme-aware on screen and is
+// baked to a solid colour on download (downloadOrrery), the way downloadSvg() does for the hex.
+// Recolouring a badge means editing both files.
 
 const ORRERY = {
   step: 120, // horizontal gap between successive orbits
@@ -865,7 +869,7 @@ function bodySvg(row, b) {
   } else {
     const tint = node.kind === "planet" ? planetTint(node) : { fill: GLYPH_DEFAULT.fill };
     const disc =
-      `<circle cx="${n2(x)}" cy="${n2(y)}" r="${n2(r)}" fill="${tint.fill}" />` +
+      `<circle class="disc" cx="${n2(x)}" cy="${n2(y)}" r="${n2(r)}" fill="${tint.fill}" />` +
       (tint.band ? giantBands(x, y, r, tint.band) : "");
     if (kids?.ring) {
       const ring = ringPaths(x, y, r);
@@ -1008,6 +1012,17 @@ function renderOrrerySvg(root, available = 0) {
   </svg>`;
 }
 
+// The orrery as a file: drawn afresh at its natural size in a single row, not as fitted to the card,
+// so the download does not depend on the window it was made in. The file has no dark page behind
+// it, so each planet disc gains a thin outline: without one an ice-white world vanishes on paper.
+const EXPORT_OUTLINE = `stroke="${EXPORT_INK}" stroke-opacity="0.45" stroke-width="0.75"`;
+
+function downloadOrrery() {
+  if (!lastData?.root) return;
+  const svg = renderOrrerySvg(lastData.root).replace(/class="disc"/g, EXPORT_OUTLINE);
+  saveSvg(svg, `${GENERATOR}-${lastData.seed}.svg`);
+}
+
 // --- legend -----------------------------------------------------------------------------------
 // What the orrery's marks mean, drawn with the orrery's own functions and colours so the two cannot
 // drift apart, and listing only the marks the system in front of the reader actually uses — a legend
@@ -1135,6 +1150,9 @@ els.rendered.addEventListener("pointerover", (event) => {
 els.rendered.addEventListener("pointerout", (event) => {
   const wrap = event.target.closest?.("details.legend-wrap");
   if (wrap && !legendOpen() && !wrap.contains(event.relatedTarget)) wrap.open = false;
+});
+els.rendered.addEventListener("click", (event) => {
+  if (event.target.closest?.(".orrery-download")) downloadOrrery();
 });
 // A click flips the pinned state. Pinning a panel that hover already opened must not let the
 // native toggle close it, hence the preventDefault.
@@ -1369,12 +1387,17 @@ function availableWidth() {
   return (els.form.clientWidth || 0) - 18;
 }
 
-function orreryCardHtml(data) {
-  return summaryHtml(data) + renderOrrerySvg(data.root, availableWidth()) + legendHtml(data.root);
+function orreryCardHtml(data, width = availableWidth()) {
+  return `${summaryHtml(data)}${renderOrrerySvg(data.root, width)}
+    <div class="orrery-foot">
+      <button type="button" class="orrery-download" title="Download this map as an SVG">⬇ Download SVG</button>
+      ${legendHtml(data.root)}
+    </div>`;
 }
 
 function render(data) {
-  return `<div class="card orrery-card">${orreryCardHtml(data)}</div>
+  return `<p class="print-ref"></p>
+    <div class="card orrery-card">${orreryCardHtml(data)}</div>
     <div class="card">
       <details class="tree-wrap">
         <summary>System detail</summary>
@@ -1728,6 +1751,41 @@ window.addEventListener("resize", () => {
     const card = els.rendered.querySelector(".orrery-card");
     if (card) card.innerHTML = orreryCardHtml(lastData);
   }, 150);
+});
+
+// Printing (the rules are under @media print in styles.css). Two things CSS cannot do: a folded
+// <details> does not print its content, so the folds in the result are opened and put back
+// afterwards — all but the moon records, which print only where the reader opened them (a btech
+// system with every moon open runs to some forty pages; the moon strip and count print regardless);
+// and the orrery is fitted to the window, not the paper, so it is re-fitted to
+// PRINT_WIDTH — roughly what A4 or Letter portrait leaves between default margins — and put back
+// too (from a saved copy, not re-measured: the print rules may still apply when afterprint fires).
+// The paper's real width cannot be measured from here; a wider sheet just prints the map at its
+// natural size. The page's own address is printed above the map, since the form is not.
+const PRINT_WIDTH = 680;
+let printClosed = [];
+let screenCard = null; // the orrery card's on-screen HTML while a print is in progress
+
+window.addEventListener("beforeprint", () => {
+  const ref = els.rendered.querySelector(".print-ref");
+  if (ref) ref.textContent = location.href;
+  const card = els.rendered.querySelector(".orrery-card");
+  if (card && lastData?.root) {
+    screenCard ??= card.innerHTML;
+    card.innerHTML = orreryCardHtml(lastData, PRINT_WIDTH);
+  }
+  // Added to, not replaced: a browser may fire beforeprint again before afterprint.
+  for (const d of els.rendered.querySelectorAll("details:not([open]):not(.moons-wrap)")) {
+    d.open = true;
+    printClosed.push(d);
+  }
+});
+window.addEventListener("afterprint", () => {
+  for (const d of printClosed) d.open = false;
+  printClosed = [];
+  const card = els.rendered.querySelector(".orrery-card");
+  if (card && screenCard !== null) card.innerHTML = screenCard;
+  screenCard = null;
 });
 
 // Back/Forward: the URL names the system to show, so re-fetch it (generation is deterministic).
