@@ -527,10 +527,11 @@ function rockBand(node) {
   return t === null ? null : ROCK_TINTS.find((b) => t < b.below);
 }
 
-// Water coverage as a 0–1 fraction where the book supplies one (ad2300 `body.water`, aow
-// `hydrosphere.hydrographicCoverage`); btech has no such figure, so its worlds are never "wet".
+// Water coverage as a 0–1 fraction where the book supplies one: ad2300 `body.water`, aow
+// `hydrosphere.hydrographicCoverage`, and btech `planet.habitability.water`, which it gives only for
+// a habitable world, so every other btech world is never "wet".
 function waterFraction(node) {
-  const w = node.body?.water ?? node.world?.hydrosphere?.hydrographicCoverage;
+  const w = node.body?.water ?? node.world?.hydrosphere?.hydrographicCoverage ?? node.planet?.habitability?.water;
   return typeof w === "number" && isFinite(w) ? w : null;
 }
 
@@ -932,14 +933,13 @@ function zoneSvg(row) {
   const { rxIn, rxOut } = row.zone;
   const ry = (rx) => ORRERY.maxRy * Math.sqrt(rx / row.maxRx);
   const x = row.x, y = row.y;
-  const style = ZONE_STYLE;
   if (row.from) {
     const a = 0.4;
     const pt = (rx, sign) => `${n2(x + rx * Math.cos(a))},${n2(y + sign * ry(rx) * Math.sin(a))}`;
-    return `<path d="M${pt(rxIn, -1)} A${n2(rxIn)},${n2(ry(rxIn))} 0 0 1 ${pt(rxIn, 1)} L${pt(rxOut, 1)} A${n2(rxOut)},${n2(ry(rxOut))} 0 0 0 ${pt(rxOut, -1)} Z" ${style} />`;
+    return `<path d="M${pt(rxIn, -1)} A${n2(rxIn)},${n2(ry(rxIn))} 0 0 1 ${pt(rxIn, 1)} L${pt(rxOut, 1)} A${n2(rxOut)},${n2(ry(rxOut))} 0 0 0 ${pt(rxOut, -1)} Z" ${ZONE_STYLE} />`;
   }
   const ellipse = (rx) => `M${n2(x - rx)},${n2(y)} A${n2(rx)},${n2(ry(rx))} 0 1 0 ${n2(x + rx)},${n2(y)} A${n2(rx)},${n2(ry(rx))} 0 1 0 ${n2(x - rx)},${n2(y)}`;
-  return `<path d="${ellipse(rxOut)} ${ellipse(rxIn)}" fill-rule="evenodd" ${style} />`;
+  return `<path d="${ellipse(rxOut)} ${ellipse(rxIn)}" fill-rule="evenodd" ${ZONE_STYLE} />`;
 }
 
 // The piece of a body's orbit ellipse either side of the baseline crossing where the body sits.
@@ -998,7 +998,7 @@ function orreryRowSvg(row) {
 // How far a row's label block reaches below its baseline: three lines plus a descender.
 const LABEL_DEPTH = ORRERY.labelTop + 2 * ORRERY.lineHeight + 8;
 
-function renderOrrerySvg(root, available = 0, rows = layoutOrrery(root, available)) {
+function renderOrrerySvg(rows) {
 
   let width = 0;
   let height = 0;
@@ -1150,7 +1150,7 @@ const EXPORT_OUTLINE = `stroke="${EXPORT_INK}" stroke-opacity="0.45" stroke-widt
 
 function downloadOrrery() {
   if (!lastData?.root) return;
-  const svg = renderOrrerySvg(lastData.root).replace(/class="disc"/g, EXPORT_OUTLINE);
+  const svg = renderOrrerySvg(layoutOrrery(lastData.root)).replace(/class="disc"/g, EXPORT_OUTLINE);
   saveSvg(svg, `${GENERATOR}-${lastData.seed}.svg`);
 }
 
@@ -1449,8 +1449,9 @@ function gaugeSvg(frac, ticks = [], fill = null) {
     parts.push(`<line x1="${n2(X(f))}" y1="${y - 5}" x2="${n2(X(f))}" y2="${y + 5}" stroke="currentColor" stroke-opacity="0.45" />`);
     parts.push(svgText(X(f), 8, escapeHtml(label), 8, MUTED_INK));
   }
+  // A share of nothing draws nothing: a zero-length line with round caps would still paint a dot.
   parts.push(fill
-    ? `<line x1="${GAUGE.x0}" y1="${y}" x2="${n2(X(frac))}" y2="${y}" stroke="${fill}" stroke-width="5" stroke-linecap="round" />`
+    ? (frac > 0 ? `<line x1="${GAUGE.x0}" y1="${y}" x2="${n2(X(frac))}" y2="${y}" stroke="${fill}" stroke-width="5" stroke-linecap="round" />` : "")
     : `<circle cx="${n2(X(frac))}" cy="${y}" r="4.5" fill="${ACCENT_INK}" />`);
   return `<svg class="gauge" viewBox="0 0 ${GAUGE.w} ${GAUGE.h}" aria-hidden="true">${parts.join("")}</svg>`;
 }
@@ -1464,7 +1465,9 @@ function worldPanelHtml(node) {
   if (re !== null) add("Radius", logGauge(re, 0.1, 20, "⊕"), unitHtml(re, "R⊕"));
   const gs = gravityG(node);
   if (gs !== null) add("Gravity", logGauge(gs, 0.05, 10, "⊕"), unitHtml(gs, "g"));
-  const k = planetTempK(node);
+  // The gauge is for a surface temperature only. A blackbody figure ignores the atmosphere, so on
+  // its freezing-to-boiling scale an ad2300 hothouse the book calls Very Hot would sit at a mild 59 °C.
+  const k = isQuantity(surfaceTemperature(node)) ? planetTempK(node) : null;
   const temp = tempFact(node);
   if (temp) {
     const gauge = k === null ? "" : gaugeSvg(k / TEMP_GAUGE_MAX_K, [[273.15 / TEMP_GAUGE_MAX_K, "0°C"], [373.15 / TEMP_GAUGE_MAX_K, "100°C"]]);
@@ -1472,7 +1475,12 @@ function worldPanelHtml(node) {
   }
   const p = atmospherePressure(node);
   const atmosphere = atmosphereFact(node);
-  if (atmosphere) add("Atmosphere", isQuantity(p) && p.unit === "atm" ? logGauge(p.value, 0.001, 1000, "1 atm") : "", atmosphere);
+  // btech adds a condition (Tainted, Toxic, …) to a habitable world's atmosphere.
+  const condition = node.planet?.habitability?.atmosCondition;
+  if (atmosphere) {
+    add("Atmosphere", isQuantity(p) && p.unit === "atm" ? logGauge(p.value, 0.001, 1000, "1 atm") : "",
+      atmosphere + (condition ? ` · ${escapeHtml(humanize(condition))}` : ""));
+  }
   const gases = atmosphereGases(node);
   if (isComposition(gases)) wide("Composition", compositionHtml(gases, false));
   const water = waterFraction(node);
@@ -1482,12 +1490,17 @@ function worldPanelHtml(node) {
   }
   // The depth only aow gives a world (`world.rotation`, `.geophysics`, `.biosphere`): words, not
   // gauges, in the book's own terms.
+  // A spin is Free (with a day), LockedTo or ResonantWith the body `boundId` names: usually the
+  // star, which goes without saying, but sometimes one of the world's own moons, which does not.
   const spin = node.world?.rotation?.spin;
-  if (spin) {
+  if (spin?.state) {
     const day = node.world.rotation.localDay ?? spin.period;
+    const toMoon = (node.children || []).some((c) => String(c.id) === String(spin.boundId)) ? " its moon" : "";
+    const ratio = /^R(\d+)_(\d+)$/.exec(spin.resonance?.name ?? "");
     const state =
-      spin.state === "LockedTo" ? "Tidally locked"
-      : spin.state === "Free" && isQuantity(day) ? `Day ${qtyHtml(day)}`
+      spin.state === "LockedTo" ? `Tidally locked${toMoon && ` to${toMoon}`}`
+      : spin.state === "ResonantWith" ? `${ratio ? `${ratio[1]}:${ratio[2]} spin` : "Spin"} resonance${toMoon && ` with${toMoon}`}`
+      : spin.state === "Free" ? (isQuantity(day) ? `Day ${qtyHtml(day)}` : "Rotating freely")
       : escapeHtml(humanize(spin.state));
     const tilt = typeof spin.obliquity === "number" ? ` · tilt ${escapeHtml(sig3(spin.obliquity))}°` : "";
     wide("Rotation", state + tilt);
@@ -1504,6 +1517,9 @@ function worldPanelHtml(node) {
     const stage = LIFE_STAGES.filter(([key]) => isQuantity(bio[key])).pop();
     wide("Life", stage ? `${stage[1]} <span class="unit">at ${qtyHtml(bio[stage[0]])}</span>` : "None");
   }
+  // btech names the highest lifeform on a habitable world.
+  const life = node.planet?.habitability?.life;
+  if (life) wide("Life", escapeHtml(humanize(life)));
   if (habitableFlag(node)) wide("Habitable", `<span class="habitable-dot"></span>${escapeHtml(habitableText())}`);
   return rows.length ? `<dl class="gauges">${rows.join("")}</dl>` : "";
 }
@@ -1640,7 +1656,7 @@ function orreryCardHtml(data, width = availableWidth()) {
   // continuation strips — most systems on a phone): a single row already reads in order, with the
   // radius under each glyph, and the strip adds little to it.
   const rows = layoutOrrery(data.root, width);
-  return `${summaryHtml(data)}${renderOrrerySvg(data.root, width, rows)}${rows.length > 1 ? distanceStripSvg(data.root, width) : ""}
+  return `${summaryHtml(data)}${renderOrrerySvg(rows)}${rows.length > 1 ? distanceStripSvg(data.root, width) : ""}
     <div class="orrery-foot">
       <button type="button" class="orrery-download" title="Download this map as an SVG">⬇ Download SVG</button>
       ${legendHtml(data.root)}
@@ -1707,14 +1723,18 @@ function orbitFact(node) {
 
 // Temperature as the reader should take it: the book's word where there is one (ad2300), a surface
 // figure where the book gives one (btech, aow), and a blackbody figure labelled as such otherwise.
+// The surface temperature a book states, as opposed to a blackbody figure for the orbit: btech
+// `planet.habitability.temperature`, aow `world.climate.averageSurfaceTemperature`. ad2300 gives only
+// a word, and aow's giants nothing.
+const surfaceTemperature = (node) => node.planet?.habitability?.temperature ?? node.world?.climate?.averageSurfaceTemperature;
+
 function tempFact(node) {
   const word = node.body?.temp;
   const k = planetTempK(node);
   if (k === null) return word ? escapeHtml(humanize(word)) : "";
   const kelvin = `${Math.round(k)} K (${Math.round(k - 273.15)} °C)`;
   if (word) return `${escapeHtml(humanize(word))} · blackbody ${kelvin}`;
-  const surface = node.planet?.habitability?.temperature ?? node.world?.climate?.averageSurfaceTemperature;
-  return surface ? kelvin : `blackbody ${kelvin}`;
+  return surfaceTemperature(node) ? kelvin : `blackbody ${kelvin}`;
 }
 
 // The book's atmosphere class and, where it gives one, the pressure: ad2300 `body.atmosphere` +
@@ -2019,6 +2039,10 @@ window.addEventListener("resize", () => {
   if (!lastData?.root) return;
   clearTimeout(resizeTimer);
   resizeTimer = setTimeout(() => {
+    // Not while printing, and not while the form cannot be measured (the print rules hide it, and
+    // may still apply just after afterprint): a re-fit then would lay the map out with no width
+    // limit, as one unsplit row, over the print-fitted or restored card.
+    if (screenCard !== null || availableWidth() <= 0) return;
     const card = els.rendered.querySelector(".orrery-card");
     if (card) card.innerHTML = orreryCardHtml(lastData);
   }, 150);
