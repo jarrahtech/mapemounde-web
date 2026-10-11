@@ -1288,7 +1288,7 @@ function nonEmpty(obj) {
 // share an identity. Built from the orrery's own functions. Size is only hinted (a giant's disc is
 // larger than a dwarf's) since an icon cannot carry the log scale; moons are a grey dot until the
 // moon-colour item lands; a ring record shows the ring alone.
-function portraitSvg(node) {
+function portraitSvg(node, scale = 1) {
   const w = 40; // wide enough for a ringed giant's ring tips
   const cx = 20;
   const cy = 13;
@@ -1316,7 +1316,7 @@ function portraitSvg(node) {
   } else {
     inner = `<circle cx="${cx}" cy="${cy}" r="${GLYPH_DEFAULT.r * 0.6}" fill="${GLYPH_DEFAULT.fill}" />`;
   }
-  return `<svg class="portrait" viewBox="0 0 ${w} 26" width="32" height="21" aria-hidden="true">${inner}</svg>`;
+  return `<svg class="portrait" viewBox="0 0 ${w} 26" width="${32 * scale}" height="${21 * scale}" aria-hidden="true">${inner}</svg>`;
 }
 
 // --- moon strip -------------------------------------------------------------------------------
@@ -1379,6 +1379,72 @@ function moonStripSvg(node) {
   return `<svg class="moon-strip" viewBox="0 0 ${STRIP.w} ${STRIP.h}" role="img" aria-label="Satellites by orbit radius, log scale">${parts.join("")}</svg>`;
 }
 
+// --- world panel ------------------------------------------------------------------------------
+// A planet's record at a glance: its portrait at size and a gauge per headline figure, so the grids
+// of numbers can stay folded under "All data". The moon strip and both folds sit in the panel's own
+// column, under the gauges, so they read as part of the world above them. The figures are the hover card's (the same named
+// field chains); a gauge only adds where the value falls. Reference ticks are context-free or
+// already in use here: Earth's radius and gravity (the hover card's R⊕ and g), 1 atm, and water's
+// freezing and boiling points. Scales are fixed, so a gauge reads the same on every world, and a
+// value off either end sits on the end.
+const GAUGE = { w: 180, h: 24, x0: 5, x1: 175, y: 16 };
+const ACCENT_INK = "#6ea8fe"; // mirrors --accent in styles.css
+const TEMP_GAUGE_MAX_K = 800;
+
+const logFrac = (v, lo, hi) => (v > 0 ? Math.log10(v / lo) / Math.log10(hi / lo) : 0);
+
+// `frac` is 0–1 along the track; `ticks` are [frac, label] reference marks; `fill` draws a bar
+// from the left (a share of a whole) in place of a marker (a point on a scale).
+function gaugeSvg(frac, ticks = [], fill = null) {
+  const X = (f) => GAUGE.x0 + Math.max(0, Math.min(1, f)) * (GAUGE.x1 - GAUGE.x0);
+  const y = GAUGE.y;
+  const parts = [`<line x1="${GAUGE.x0}" y1="${y}" x2="${GAUGE.x1}" y2="${y}" stroke="currentColor" stroke-opacity="0.22" stroke-width="2" stroke-linecap="round" />`];
+  for (const [f, label] of ticks) {
+    parts.push(`<line x1="${n2(X(f))}" y1="${y - 5}" x2="${n2(X(f))}" y2="${y + 5}" stroke="currentColor" stroke-opacity="0.45" />`);
+    parts.push(svgText(X(f), 8, escapeHtml(label), 8, MUTED_INK));
+  }
+  parts.push(fill
+    ? `<line x1="${GAUGE.x0}" y1="${y}" x2="${n2(X(frac))}" y2="${y}" stroke="${fill}" stroke-width="5" stroke-linecap="round" />`
+    : `<circle cx="${n2(X(frac))}" cy="${y}" r="4.5" fill="${ACCENT_INK}" />`);
+  return `<svg class="gauge" viewBox="0 0 ${GAUGE.w} ${GAUGE.h}" aria-hidden="true">${parts.join("")}</svg>`;
+}
+
+function worldPanelHtml(node) {
+  const rows = [];
+  const add = (label, gauge, value) => rows.push(`<dt>${label}</dt><dd>${gauge}</dd><dd>${value}</dd>`);
+
+  const rm = radiusM(node.core?.radius);
+  if (rm !== null) {
+    const re = rm / EARTH_RADIUS_M;
+    add("Radius", gaugeSvg(logFrac(re, 0.1, 20), [[logFrac(1, 0.1, 20), "⊕"]]), unitHtml(re, "R⊕"));
+  }
+  const g = node.core?.surfaceGravity;
+  if (isQuantity(g) && g.unit === "m/s²") {
+    const gs = g.value / G0;
+    add("Gravity", gaugeSvg(logFrac(gs, 0.05, 10), [[logFrac(1, 0.05, 10), "⊕"]]), unitHtml(gs, "g"));
+  }
+  const k = planetTempK(node);
+  if (k !== null) {
+    add("Temperature", gaugeSvg(k / TEMP_GAUGE_MAX_K, [[273.15 / TEMP_GAUGE_MAX_K, "0°C"], [373.15 / TEMP_GAUGE_MAX_K, "100°C"]]), tempFact(node));
+  } else if (tempFact(node)) {
+    add("Temperature", "", tempFact(node));
+  }
+  const p = node.body?.atmosphericPressure ?? node.world?.atmosphere?.pressure;
+  const atmosphere = atmosphereFact(node);
+  if (atmosphere) {
+    const gauge = isQuantity(p) && p.unit === "atm" ? gaugeSvg(logFrac(p.value, 0.001, 1000), [[logFrac(1, 0.001, 1000), "1 atm"]]) : "";
+    add("Atmosphere", gauge, atmosphere);
+  }
+  const gases = node.planet?.habitability?.composition ?? node.world?.atmosphere?.composition;
+  if (isComposition(gases)) rows.push(`<dt>Composition</dt><dd class="wide">${compositionHtml(gases, false)}</dd>`);
+  const water = waterFraction(node);
+  if (water !== null) add("Water", gaugeSvg(water, [], ROCK_TINTS.find((b) => b.wet).wet), `${Math.round(water * 100)}% cover`);
+  if (habitableFlag(node)) {
+    rows.push(`<dt>Habitable</dt><dd class="wide"><span class="habitable-dot"></span>yes (${escapeHtml(HABITABLE_FLAG_NAME[GENERATOR] || "the book's flag")})</dd>`);
+  }
+  return rows.length ? `<dl class="gauges">${rows.join("")}</dl>` : "";
+}
+
 // `hasGlyph` is true for bodies drawn somewhere — stars, a star's direct children (the orrery) and a
 // planet's satellites (its moon strip) — whose record id then doubles as a link to that glyph.
 function renderNode(node, hasGlyph) {
@@ -1408,18 +1474,31 @@ function renderNode(node, hasGlyph) {
         <ul class="children">${sats.map((child) => renderNode(child, true)).join("")}</ul>
       </details>`;
   }
-  return `<li class="node" data-id="${escapeHtml(node.id)}">
+  // A planet leads with its panel and folds the figures away; every other body shows them as before.
+  // The panel's large portrait stands in for the small one in the head.
+  const gauges = node.kind === "planet" ? worldPanelHtml(node) : "";
+  const detail = `<div class="node-detail">${sections.join("")}</div>`;
+  const body = gauges
+    ? `<div class="world-panel">
+        ${portraitSvg(node, 3.5)}
+        <div class="world-body">
+          ${gauges}
+          ${satellites}
+          <details class="figures"><summary>All data</summary>${detail}</details>
+        </div>
+      </div>`
+    : `${detail}${satellites}`;
+  return `<li class="node${gauges ? " world" : ""}" data-id="${escapeHtml(node.id)}">
     <div class="node-head">
-      ${portraitSvg(node)}
+      ${gauges ? "" : portraitSvg(node)}
       <span class="badge badge-${escapeHtml(node.kind)}">${escapeHtml(node.kind)}</span>
+      ${orbitRadius ? `<span class="node-orbit">${orbitRadius}</span>` : ""}
       <span class="node-title">${escapeHtml(title)}</span>
       ${hasGlyph
         ? `<button type="button" class="node-id node-id-link" title="Show in the map">#${escapeHtml(node.id)} ↑</button>`
         : `<span class="node-id">#${escapeHtml(node.id)}</span>`}
-      ${orbitRadius ? `<span class="node-orbit">${orbitRadius}</span>` : ""}
     </div>
-    <div class="node-detail">${sections.join("")}</div>
-    ${satellites}
+    ${body}
     ${kids ? `<ul class="children">${kids}</ul>` : ""}
   </li>`;
 }
@@ -1865,8 +1944,9 @@ window.addEventListener("resize", () => {
 
 // Printing (the rules are under @media print in styles.css). Two things CSS cannot do: a folded
 // <details> does not print its content, so the folds in the result are opened and put back
-// afterwards — all but the moon records, which print only where the reader opened them (a btech
-// system with every moon open runs to some forty pages; the moon strip and count print regardless);
+// afterwards — all but the moon records and a planet's "All data", which print only where the
+// reader opened them (a btech system with every moon open runs to some forty pages; the moon strip
+// and count, and the planet's panel, print regardless);
 // and the orrery is fitted to the window, not the paper, so it is re-fitted to
 // PRINT_WIDTH — roughly what A4 or Letter portrait leaves between default margins — and put back
 // too (from a saved copy, not re-measured: the print rules may still apply when afterprint fires).
@@ -1885,7 +1965,7 @@ window.addEventListener("beforeprint", () => {
     card.innerHTML = orreryCardHtml(lastData, PRINT_WIDTH);
   }
   // Added to, not replaced: a browser may fire beforeprint again before afterprint.
-  for (const d of els.rendered.querySelectorAll("details:not([open]):not(.moons-wrap)")) {
+  for (const d of els.rendered.querySelectorAll("details:not([open]):not(.moons-wrap):not(.figures)")) {
     d.open = true;
     printClosed.push(d);
   }

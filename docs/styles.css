@@ -587,7 +587,6 @@ code {
 .node-orbit {
   color: var(--muted);
   font-size: 0.9rem;
-  margin-left: auto;
 }
 
 .badge {
@@ -702,6 +701,99 @@ code {
   background: var(--c);
   margin-right: 0.35em;
   vertical-align: 0.05em;
+}
+
+/* World panel: a planet's record at a glance — its portrait at size beside a gauge per headline
+   figure — with the grids of numbers folded under "All data". */
+.world-panel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.4rem 1.25rem;
+  margin: 0.4rem 0 0.2rem;
+}
+
+/* Gauges, moon strip and the folds share one column, so the folds hang off this world, not the
+   next one; wider gaps between worlds than within them do the rest. */
+.world-body {
+  flex: 1;
+  min-width: min(100%, 260px);
+}
+
+/* Pinned to the top: the column beside it grows when a fold opens. */
+.world-panel > .portrait {
+  align-self: flex-start;
+}
+
+.world-body > details {
+  margin-top: 0.2rem;
+}
+
+.node.world {
+  margin: 1.2rem 0;
+}
+
+.gauges {
+  display: grid;
+  grid-template-columns: max-content minmax(90px, 180px) minmax(0, max-content);
+  align-items: center;
+  gap: 0.05rem 0.7rem;
+  margin: 0;
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.gauges dt {
+  color: var(--muted);
+}
+
+.gauges dd {
+  margin: 0;
+  min-width: 0;
+}
+
+.gauges dd.wide {
+  grid-column: 2 / -1;
+}
+
+.gauge {
+  display: block;
+  width: 100%;
+  height: auto;
+  color: var(--text);
+}
+
+.gauges .comp {
+  margin: 0.25rem 0;
+  max-width: 320px;
+}
+
+.habitable-dot {
+  display: inline-block;
+  width: 0.55em;
+  height: 0.55em;
+  margin-right: 0.4em;
+  border-radius: 50%;
+  background: #6fcf97;
+}
+
+.figures > summary {
+  font-size: 0.85rem;
+}
+
+.figures > .node-detail {
+  margin-top: 0.3rem;
+}
+
+@media (max-width: 600px) {
+  /* No room for three columns: the value drops under its gauge. */
+  .gauges {
+    grid-template-columns: max-content minmax(0, 1fr);
+  }
+
+  .gauges dd {
+    grid-column: 2;
+  }
 }
 
 /* Moon strip: a planet's satellites on a log axis, above their folded records. */
@@ -841,6 +933,7 @@ pre {
   .orrery-download,
   .legend-wrap > summary,
   .tree-wrap > summary,
+  .figures:not([open]) > summary,
   #result > details {
     display: none;
   }

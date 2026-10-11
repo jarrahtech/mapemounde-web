@@ -197,9 +197,11 @@ Small, mostly no API change. Together these turn "seven identical discs" into a 
       the page count sane: moon records print only where the reader has opened them (the strip
       and count always print), and worlds flow with no forced page breaks. On A4, ad2300 /
       btech 44 / aow 4 print as 3 / 8 / 9 pages; every moon open is 6 / 39 / 33, and a page per
-      world on top of that 10 / 42 / 37. [M]
-- [ ] **Standalone system sheet.** A self-contained SVG or PDF with orrery, summary and world
-      cards, for sharing without the site. [L]
+      world on top of that 10 / 42 / 37. Since the world panel: "All data" also
+      prints only where opened, and the same three systems are 3 / 7 / 4 pages (6 / 10 / 11 with
+      every "All data" open). [M]
+- [-] **Standalone system sheet.** *Ignore (decided 2026-10-11).* A self-contained SVG or PDF
+      with orrery, summary and world cards, for sharing without the site. [L]
 
 ## Phase 4 — bigger, or lower value
 
@@ -209,9 +211,14 @@ Small, mostly no API change. Together these turn "seven identical discs" into a 
       only where the map is split over more than one row (companions, continuation strips, most
       systems on a phone); a single-row map does not need it. Belts are a stack of dots, not
       bands, since no book gives a belt a width. Not in the SVG download. [M]
-- [ ] **Per-planet detail panel.** Click a world for a card with a large portrait, gauges for
-      gravity / pressure / temperature, the atmosphere bar and the moon strip. The natural end
-      state of Phase 2; where AoW's depth pays off. [L]
+- [x] **Per-planet detail panel.** Not a click-through card but the default view of each planet's
+      record in System detail: a large portrait beside gauges for radius and gravity (Earth
+      ticked), temperature (0 and 100 °C ticked) and pressure (1 atm ticked), the atmosphere bar,
+      water cover and the book's habitability flag, with the moon strip and the folds (moons,
+      "All data" for the full grids) in the same column. No new conversions: the figures are
+      the hover card's. The orbit radius moved beside the kind badge on every record. Still to
+      do: surface aow's depth (climate, geophysics, biosphere), which is only under "All data";
+      tighten the portrait's box. [L]
 - [ ] **Batch roll and pick.** Roll N seeds, show thumbnails, filter by "has a habitable
       world / gas giant / belt / companion". Directly serves the GM loop. [M–L]
 - [x] **Companion tether.** The tether now leaves the companion glyph's edge and drops past its
@@ -221,7 +228,8 @@ Small, mostly no API change. Together these turn "seven identical discs" into a 
 - [x] **Eccentric orbits (aow).** Done on the distance strip instead of the orrery: a faint bar
       from closest to farthest approach, where it shows real overlap. Offsetting the rank-spaced
       ellipses would suggest a precision the map does not have. [S, low value]
-- [ ] **Animated or scale-toggling orrery.** Fun, low information per unit of effort. [L, low]
+- [-] **Animated or scale-toggling orrery.** *Ignore (decided 2026-10-11).* Fun, low information
+      per unit of effort. [L, low]
 
 ## Design notes
 
