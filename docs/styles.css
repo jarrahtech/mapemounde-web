@@ -319,6 +319,15 @@ section#result {
   color: var(--text);
 }
 
+/* Distance strip: the same bodies at their true orbit radii on a log axis, under the map. */
+.dist-strip {
+  display: block;
+  margin: 0.4rem auto 0;
+  width: 100%;
+  height: auto;
+  color: var(--text);
+}
+
 /* Legend: an "ⓘ Legend" pill at the bottom right of the orrery card that unfolds the legend (only
    the marks this system uses, in the orrery's own colours) as a panel beneath itself. The panel is
    in the page flow, not floated, so an open legend never covers the map. */

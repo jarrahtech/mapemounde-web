@@ -203,11 +203,12 @@ Small, mostly no API change. Together these turn "seven identical discs" into a 
 
 ## Phase 4 — bigger, or lower value
 
-- [ ] **Log-distance strip under the orrery.** A thin horizontal log axis with each body at
-      its true radius, the habitable zone shaded, belts as bands. For single stars this is a
-      nice-to-have; for aow binaries it is the only honest way to show a companion at 14,000
-      au next to planets at 0.03 au. Could also label the companion tether with the
-      separation as a cheaper first step. [M; tether label S]
+- [x] **Log-distance strip under the orrery.** One log axis in au shared by a row per star (the
+      primary, then each companion with bodies of its own), every body at its true radius in the
+      orrery's own tint and relative size, btech's life zone as a band, dots hoverable. Shown
+      only where the map is split over more than one row (companions, continuation strips, most
+      systems on a phone); a single-row map does not need it. Belts are a stack of dots, not
+      bands, since no book gives a belt a width. Not in the SVG download. [M]
 - [ ] **Per-planet detail panel.** Click a world for a card with a large portrait, gauges for
       gravity / pressure / temperature, the atmosphere bar and the moon strip. The natural end
       state of Phase 2; where AoW's depth pays off. [L]
@@ -217,7 +218,9 @@ Small, mostly no API change. Together these turn "seven identical discs" into a 
       label block before sweeping to the companion's row, instead of running through the label.
       (Per-star bands happen automatically once the API gives a star a zone; separation on the
       tether was dropped as redundant with the label and hover card.) [XS]
-- [ ] **Eccentric orbits (aow).** Offset the ellipse by `orbit.eccentricity`. [S, low value]
+- [x] **Eccentric orbits (aow).** Done on the distance strip instead of the orrery: a faint bar
+      from closest to farthest approach, where it shows real overlap. Offsetting the rank-spaced
+      ellipses would suggest a precision the map does not have. [S, low value]
 - [ ] **Animated or scale-toggling orrery.** Fun, low information per unit of effort. [L, low]
 
 ## Design notes

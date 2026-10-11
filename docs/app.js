@@ -1012,6 +1012,112 @@ function renderOrrerySvg(root, available = 0) {
   </svg>`;
 }
 
+// --- distance strip ---------------------------------------------------------------------------
+// The orrery spaces orbits by rank; this is its true-distance twin. One log axis in au shared by
+// every row, a row per star that has bodies (the primary, then each companion with its own), each
+// body at its real orbit radius. The only place a companion at 1,000 au and a planet at 0.04 au can
+// be compared honestly. Marks are the orrery's, shrunk: planet tint and relative size, the star
+// gradients, the habitability dot, the book's zone as a band. A belt is a short stack of dots at its
+// radius, not a band, because no book gives a belt a width. Where a book gives an eccentricity (aow)
+// a faint bar runs from closest to farthest approach. Shown only under a map that is split over
+// several rows (see orreryCardHtml). Drawn at the card's width (within limits)
+// rather than scaled to it, so the tick labels stay legible on a phone.
+const DIST = { maxW: 900, minW: 340, x0: 84, padR: 20, top: 16, pitch: 38, foot: 22, head: 15 };
+
+function distanceStripSvg(root, available = 0) {
+  const rows = [];
+  const walk = (star) => {
+    const bodies = (star.children || [])
+      .filter((n) => !isSatellite(n))
+      .map((node) => {
+        const au = orbitAu(node);
+        const e = typeof node.orbit?.eccentricity === "number" ? node.orbit.eccentricity : 0;
+        return { node, au, near: au * (1 - e), far: au * (1 + e) };
+      })
+      .filter((b) => b.au > 0 && b.near > 0)
+      .sort((a, b) => a.au - b.au);
+    if (!bodies.length) return;
+    rows.push({ star, bodies });
+    for (const b of bodies) if (b.node.kind === "star") walk(b.node);
+  };
+  walk(root);
+  if (!rows.length) return "";
+
+  const all = rows.flatMap((r) => r.bodies);
+  let lo = Math.log10(Math.min(...all.map((b) => b.near)));
+  let hi = Math.log10(Math.max(...all.map((b) => b.far)));
+  if (hi - lo < 0.4) {
+    const mid = (lo + hi) / 2;
+    lo = mid - 0.2;
+    hi = mid + 0.2;
+  }
+  const pad = (hi - lo) * 0.05;
+  lo -= pad;
+  hi += pad;
+  const w = Math.max(DIST.minW, Math.min(DIST.maxW, available || DIST.maxW));
+  const x1 = w - DIST.padR;
+  const X = (au) => DIST.x0 + ((Math.log10(au) - lo) / (hi - lo)) * (x1 - DIST.x0);
+  const clampX = (au) => Math.max(DIST.x0, Math.min(x1, X(au)));
+  const bottom = DIST.top + (rows.length - 1) * DIST.pitch + 14;
+  const h = bottom + DIST.foot;
+  const headR = (star) => Math.max(4, (9 * starRadiusPx(star, root)) / ORRERY.rootStar);
+
+  const tints = new Set();
+  const parts = [];
+  // Decade gridlines through every row, labelled once along the bottom. A system spanning only a
+  // decade or two would get one or two of them, so it gains the 2s and 5s as well.
+  const steps = hi - lo < 2.5 ? [1, 2, 5] : [1];
+  for (let e = Math.floor(lo); e <= Math.floor(hi); e++) {
+    for (const m of steps) {
+      const au = m * 10 ** e;
+      if (Math.log10(au) < lo || Math.log10(au) > hi) continue;
+      const x = n2(X(au));
+      parts.push(`<line x1="${x}" y1="${DIST.top - 10}" x2="${x}" y2="${bottom}" stroke="currentColor" stroke-opacity="${m === 1 ? 0.13 : 0.07}" />`);
+      parts.push(svgText(X(au), bottom + 13, escapeHtml(String(Number(au.toPrecision(1)))), 10, MUTED_INK));
+    }
+  }
+  parts.push(`<text x="4" y="${bottom + 13}" font-family="system-ui, sans-serif" font-size="10" fill="${MUTED_INK}">au, log scale</text>`);
+
+  rows.forEach((row, i) => {
+    const y = DIST.top + i * DIST.pitch;
+    const zone = starZoneAu(row.star);
+    if (zone) {
+      const x0 = clampX(zone.inner), x1 = clampX(zone.outer);
+      if (x1 - x0 > 1) parts.push(`<rect x="${n2(x0)}" y="${y - 9}" width="${n2(x1 - x0)}" height="18" rx="3" fill="${HABITABLE_INK}" fill-opacity="0.13" stroke="${HABITABLE_INK}" stroke-opacity="0.35" />`);
+    }
+    parts.push(`<line x1="${DIST.x0}" y1="${y}" x2="${x1}" y2="${y}" stroke="currentColor" stroke-opacity="0.25" />`);
+    const tint = starTint(row.star);
+    tints.add(tint);
+    parts.push(hoverable(row.star, starGlyph(DIST.head, y, headR(row.star), tint, "dist") +
+      `<text x="${DIST.head + 15}" y="${y + 3.5}" font-family="system-ui, sans-serif" font-size="10" font-weight="600" fill="currentColor">${escapeHtml(bodyLabel(row.star))}</text>`));
+    for (const b of row.bodies) {
+      const x = X(b.au);
+      if (X(b.far) - X(b.near) > 2) {
+        parts.push(`<line x1="${n2(X(b.near))}" y1="${y}" x2="${n2(X(b.far))}" y2="${y}" stroke="currentColor" stroke-opacity="0.3" stroke-width="3" stroke-linecap="round" />`);
+      }
+      let mark;
+      if (b.node.kind === "star") {
+        const t = starTint(b.node);
+        tints.add(t);
+        mark = starGlyph(x, y, headR(b.node) * 0.75, t, "dist");
+      } else if (b.node.kind === "asteroidBelt") {
+        mark = [-5, 0, 5].map((dy) => `<circle cx="${n2(x)}" cy="${y + dy}" r="1.7" fill="${RING_INK}" />`).join("");
+      } else {
+        const planet = b.node.kind === "planet";
+        const r = planet ? 2.5 + (3.5 * (planetRadiusPx(b.node) - PLANET_PX.min)) / (PLANET_PX.max - PLANET_PX.min) : 3;
+        mark = `<circle cx="${n2(x)}" cy="${y}" r="${n2(r)}" fill="${planet ? planetTint(b.node).fill : GLYPH_DEFAULT.fill}" />`;
+        if (planet && habitableFlag(b.node)) mark += `<circle cx="${n2(x)}" cy="${n2(y + r + 4)}" r="1.8" fill="${HABITABLE_INK}" />`;
+      }
+      parts.push(hoverable(b.node, mark));
+    }
+  });
+
+  return `<svg class="dist-strip" viewBox="0 0 ${w} ${h}" style="max-width:${w}px" role="img" aria-label="Bodies by true orbit radius, log scale">
+    <defs>${starTintDefs(tints, "dist")}</defs>
+    ${parts.join("")}
+  </svg>`;
+}
+
 // The orrery as a file: drawn afresh at its natural size in a single row, not as fitted to the card,
 // so the download does not depend on the window it was made in. The file has no dark page behind
 // it, so each planet disc gains a thin outline: without one an ice-white world vanishes on paper.
@@ -1388,7 +1494,11 @@ function availableWidth() {
 }
 
 function orreryCardHtml(data, width = availableWidth()) {
-  return `${summaryHtml(data)}${renderOrrerySvg(data.root, width)}
+  // The distance strip only where the map is split over more than one row (a companion's row, or
+  // continuation strips — most systems on a phone): a single row already reads in order, with the
+  // radius under each glyph, and the strip adds little to it.
+  const split = layoutOrrery(data.root, width).length > 1;
+  return `${summaryHtml(data)}${renderOrrerySvg(data.root, width)}${split ? distanceStripSvg(data.root, width) : ""}
     <div class="orrery-foot">
       <button type="button" class="orrery-download" title="Download this map as an SVG">⬇ Download SVG</button>
       ${legendHtml(data.root)}
